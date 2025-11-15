@@ -1,0 +1,6 @@
+{
+  "python.defaultInterpreterPath": "./script/.venv/bin/python",
+  "python.analysis.extraPaths": [
+    "./script"
+  ]
+}
