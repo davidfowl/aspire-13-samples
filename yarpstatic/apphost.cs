@@ -7,7 +7,7 @@ var builder = DistributedApplication.CreateBuilder(args);
 
 builder.AddDockerComposeEnvironment("dc");
 
-var frontend = builder.AddViteApp("static", "./frontend");
+var frontend = builder.AddViteApp("frontend", "./frontend");
 
 builder.AddYarp("app")
            .WithExternalHttpEndpoints()

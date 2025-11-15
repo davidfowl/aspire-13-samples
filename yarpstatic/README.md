@@ -32,7 +32,7 @@ The application consists of:
 - **Static File Serving**: YARP serves the built frontend assets
 - **Development Integration**: Vite.js integration with Aspire for development workflow  
 - **External Endpoints**: YARP configured with external HTTP endpoints for public access
-- **Docker Compose Support**: Includes Docker Compose environment configuration
+- **Container Support**: Includes container orchestration environment configuration
 - **Automatic Dependency Management**: Aspire handles frontend package installation automatically
 
 ## Project Structure
@@ -57,7 +57,7 @@ yarpstatic/
 ### Prerequisites
 
 - [Aspire CLI](https://aspire.dev/get-started/install-cli/) (install with `curl -sSL https://aspire.dev/install.sh | bash`)
-- [Docker](https://www.docker.com/get-started) (for Docker Compose environment)
+- Supported container runtime (docker, podman or rancher) (for container orchestration environment)
 
 > **Note**: Aspire 13+ automatically handles .NET SDK and Node.js dependencies, including package installation.
 
