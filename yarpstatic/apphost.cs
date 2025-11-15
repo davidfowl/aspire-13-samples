@@ -10,7 +10,15 @@ builder.AddDockerComposeEnvironment("dc");
 var frontend = builder.AddViteApp("frontend", "./frontend");
 
 builder.AddYarp("app")
-           .WithExternalHttpEndpoints()
-           .PublishWithStaticFiles(frontend);
+       .WithConfiguration(c =>
+       {
+           if (builder.ExecutionContext.IsRunMode)
+           {
+               // In run mode, forward all requests to vite dev server
+               c.AddRoute("{**catch-all}", frontend);
+           }
+       })
+       .WithExternalHttpEndpoints()
+       .PublishWithStaticFiles(frontend);
 
 builder.Build().Run();
