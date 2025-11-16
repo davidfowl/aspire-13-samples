@@ -1,6 +1,6 @@
 # Aspire 13 Samples
 
-Small, focused samples demonstrating .NET Aspire 13's polyglot platform support for Python, JavaScript, and C#.
+Small, focused samples demonstrating .NET Aspire 13's polyglot platform support for Python, JavaScript, C#, and Go.
 
 **Quick Start:** `cd <sample> && aspire run`
 
@@ -39,6 +39,11 @@ Single-file AppHost demonstrating static file serving. **(YARP reverse proxy, Vi
 
 **[vite-csharp-postgres](./vite-csharp-postgres)** - ASP.NET Core Minimal API + PostgreSQL + Vite
 Todo app demonstrating modern .NET patterns. **(EF Core 10, PostgreSQL, pgAdmin, Scalar API docs, Vite+React, OpenTelemetry, container file publishing)**
+
+### Go
+
+**[golang-api](./golang-api)** - Go API with in-memory storage
+REST API with chi router and thread-safe in-memory data store. Custom Go integration that downloads modules, runs apps, and builds containers. **(Go, chi router, CRUD operations, sync.RWMutex, AddGoApp integration)**
 
 ### Polyglot
 
