@@ -1,99 +1,51 @@
-# Aspire Static Files Sample
+# YARP Serving Static Files
 
-**Vite based app + YARP for static file serving + Docker Compose for hosting.**
+YARP reverse proxy serving a Vite frontend with dual-mode operation (dev HMR + production static files).
 
-This sample demonstrates how to use YARP (Yet Another Reverse Proxy) with Aspire to serve static files from a Vite.js frontend application.
+## Architecture
 
-## Quick Start
+```mermaid
+flowchart LR
+    Browser --> YARP
+    YARP -->|Dev: Proxy| Vite[Vite Dev Server]
+    YARP -->|Prod: Serve| Static[Static Files]
+```
 
-### Prerequisites
+## What This Demonstrates
 
-- [Aspire CLI](https://aspire.dev/get-started/install-cli/)
-- [Docker](https://docs.docker.com/get-docker/)
-- [Node.js 22+](https://nodejs.org/)
+- **AddViteApp**: Vite-based frontend application
+- **AddYarp**: Reverse proxy with dual-mode routing
+- **PublishWithStaticFiles**: Automatic static file serving in production
+- **ExecutionContext.IsRunMode**: Different behavior for dev vs production
+- **Minimal AppHost**: Single-file orchestration
 
-### Commands
-
-**Run locally** (automatically runs `npm run dev` for you):
+## Running
 
 ```bash
 aspire run
 ```
 
-**Deploy to Docker Compose**:
+## Commands
 
 ```bash
-aspire deploy
+aspire run      # Run locally
+aspire deploy   # Deploy to Docker Compose
+aspire do docker-compose-down-dc  # Teardown deployment
 ```
 
-**Teardown Docker Compose deployment**:
+## Key Aspire Patterns
 
-```bash
-aspire do docker-compose-down-dc
-```
-
-**Build container images** (optional):
-
-```bash
-aspire do build
-```
-
-## Overview
-
-The application consists of:
-
-- **Aspire AppHost** - Orchestrates the application and configures YARP
-- **YARP** - Serves static files from the Vite.js frontend
-- **Vite.js Frontend** - A simple JavaScript application with a counter component
-
-## Key Code
-
-The AppHost configuration demonstrates how to use YARP with different behaviors for run mode vs publish mode:
-
+**Dual-Mode YARP** - Dev proxies to Vite, production serves static files:
 ```csharp
-var builder = DistributedApplication.CreateBuilder(args);
-
-builder.AddDockerComposeEnvironment("dc");
-
 var frontend = builder.AddViteApp("frontend", "./frontend");
 
 builder.AddYarp("app")
-       .WithConfiguration(c =>
-       {
-           if (builder.ExecutionContext.IsRunMode)
-           {
-               // In run mode, forward all requests to vite dev server
-               c.AddRoute("{**catch-all}", frontend);
-           }
-       })
-       .WithExternalHttpEndpoints()
-       .PublishWithStaticFiles(frontend);
+    .WithConfiguration(c =>
+    {
+        if (builder.ExecutionContext.IsRunMode)
+            c.AddRoute("{**catch-all}", frontend); // Dev: proxy to Vite HMR
+    })
+    .PublishWithStaticFiles(frontend); // Prod: serve static files
 ```
 
-Key features:
-
-- **Docker Compose Environment**: Registers a Docker Compose environment for deployment
-- **Development Mode**: Routes all requests to the Vite dev server for hot reload
-- **Production Mode**: Serves static files from the built frontend
-- **External HTTP Endpoints**: Enables external access to the YARP proxy
-
-## Deployment
-
-The sample uses Docker Compose for deployment. Simply run:
-
-```bash
-aspire deploy
-```
-
-This will:
-
-1. Build the Vite frontend
-2. Create container images
-3. Generate Docker Compose files
-4. Deploy the application
-
-To teardown the deployment:
-
-```bash
-aspire do docker-compose-down-dc
-```
+**Single Entry Point** - YARP provides one external endpoint for the entire application

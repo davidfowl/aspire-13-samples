@@ -30,6 +30,14 @@ aspire run
 
 Aspire will prompt for your OpenAI API key on first run.
 
+## Commands
+
+```bash
+aspire run      # Run locally
+aspire deploy   # Deploy to Docker Compose
+aspire do docker-compose-down-dc  # Teardown deployment
+```
+
 ## Key Aspire Patterns
 
 **Static File Embedding** - Frontend proxied in dev, embedded in production:

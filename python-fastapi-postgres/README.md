@@ -14,22 +14,10 @@ This sample demonstrates Aspire 13's polyglot platform support for Python applic
 
 ### Commands
 
-**Run locally** (automatically installs dependencies with pip):
-
 ```bash
-aspire run
-```
-
-**Deploy to Docker Compose**:
-
-```bash
-aspire deploy
-```
-
-**Teardown Docker Compose deployment**:
-
-```bash
-aspire do docker-compose-down-dc
+aspire run      # Run locally
+aspire deploy   # Deploy to Docker Compose
+aspire do docker-compose-down-dc  # Teardown deployment
 ```
 
 ## Overview

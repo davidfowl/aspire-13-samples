@@ -16,25 +16,13 @@ This sample demonstrates Aspire 13's Python support combined with AI workloads, 
 
 ### Commands
 
-**Run locally**:
-
 ```bash
-aspire run
+aspire run      # Run locally
+aspire deploy   # Deploy to Docker Compose
+aspire do docker-compose-down-dc  # Teardown deployment
 ```
 
-When you run the app for the first time, Aspire will prompt you for your OpenAI API key. The key is securely stored and passed to the Python application as the `OPENAI_API_KEY` environment variable.
-
-**Deploy to Docker Compose**:
-
-```bash
-aspire deploy
-```
-
-**Teardown Docker Compose deployment**:
-
-```bash
-aspire do docker-compose-down-dc
-```
+When you run the app for the first time, Aspire will prompt you for your OpenAI API key.
 
 ## Overview
 

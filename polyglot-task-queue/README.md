@@ -64,6 +64,14 @@ graph TB
 aspire run
 ```
 
+## Commands
+
+```bash
+aspire run      # Run locally
+aspire deploy   # Deploy to Docker Compose
+aspire do docker-compose-down-dc  # Teardown deployment
+```
+
 ## Key Aspire Patterns
 
 **RabbitMQ Setup** - Message queue with management UI:

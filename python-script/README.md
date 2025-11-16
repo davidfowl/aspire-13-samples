@@ -13,10 +13,8 @@ This sample shows how Aspire 13's Python support automatically manages Python ap
 
 ### Commands
 
-**Run locally**:
-
 ```bash
-aspire run
+aspire run      # Run locally
 ```
 
 ## Overview

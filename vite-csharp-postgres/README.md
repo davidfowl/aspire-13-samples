@@ -15,22 +15,10 @@ This sample demonstrates Aspire 13's C# support with a fullstack todo applicatio
 
 ### Commands
 
-**Run locally** (automatically installs dependencies for both frontend and backend):
-
 ```bash
-aspire run
-```
-
-**Deploy to Docker Compose**:
-
-```bash
-aspire deploy
-```
-
-**Teardown Docker Compose deployment**:
-
-```bash
-aspire do docker-compose-down-dc
+aspire run      # Run locally
+aspire deploy   # Deploy to Docker Compose
+aspire do docker-compose-down-dc  # Teardown deployment
 ```
 
 ## Overview
