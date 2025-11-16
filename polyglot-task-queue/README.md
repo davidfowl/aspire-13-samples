@@ -105,12 +105,18 @@ All state changes flow through RabbitMQ queues, making the system stateless and 
   - In-memory cache built from consuming messages
   - Stateless API that can restart without losing task state
   - All state changes published as events to queues
+- **Distributed Tracing**:
+  - End-to-end OpenTelemetry instrumentation across all services
+  - Trace context propagation through RabbitMQ message headers
+  - Messaging semantic conventions for all queue operations
+  - Polyglot tracing (Node.js, Python, C#) in a single trace
 - **Aspire Integration**:
   - `AddRabbitMQ()` with management plugin
   - `AddNodeApp()` for Node.js applications
   - `AddPythonApp()` for Python applications
   - `AddCSharpApp()` for C# applications
   - `AddViteApp()` for frontend applications
+  - Automatic OpenTelemetry configuration and export
 - **Service References**: Automatic connection string injection via environment variables
 - **Language-Specific Strengths**:
   - Python: Data analysis with pandas/numpy
@@ -409,9 +415,91 @@ api.PublishWithContainerFiles(frontend, "public");
 - **Vite + React + TypeScript**: Modern frontend
 - **Python + aio-pika + pandas**: Data analysis worker
 - **C# + Aspire.RabbitMQ.Client**: Report generation worker
+- **OpenTelemetry**: End-to-end distributed tracing
+
+## Distributed Tracing with OpenTelemetry
+
+This sample demonstrates **end-to-end distributed tracing** across all polyglot services using OpenTelemetry.
+
+### Trace Flow
+
+A single task submission creates a distributed trace that spans:
+
+```
+Frontend (HTTP) → Node.js API → RabbitMQ → Python/C# Worker → RabbitMQ → Node.js API → Frontend
+```
+
+### What Gets Traced
+
+#### **Node.js API** (`api/`)
+- HTTP requests (auto-instrumented by Express)
+- RabbitMQ publish operations with context injection
+- RabbitMQ consume operations with context extraction
+- Custom spans for task submission and processing
+- **Messaging semantic conventions**: `messaging.system`, `messaging.destination.name`, `messaging.operation`, `task.id`
+
+#### **Python Worker** (`worker-python/`)
+- RabbitMQ message consumption with parent context extraction
+- Data processing spans
+- Result publishing with trace propagation
+- **Messaging semantic conventions**: `messaging.system`, `messaging.source.name`, `messaging.operation`, `task.id`, `task.type`
+
+#### **C# Worker** (`worker-csharp/`)
+- RabbitMQ message consumption using `ActivitySource`
+- Report generation child spans
+- Result publishing with trace context
+- **Messaging semantic conventions**: `messaging.system`, `messaging.source.name`, `messaging.operation`, `task.id`, `task.type`
+
+### Trace Context Propagation
+
+Trace context is propagated through **RabbitMQ message headers** using W3C Trace Context:
+
+1. **API publishes task**: Injects trace context into message headers
+2. **Worker consumes task**: Extracts trace context from headers, creates child span
+3. **Worker publishes result**: Injects updated trace context into result headers
+4. **API consumes result**: Extracts trace context, completes the trace
+
+### Observing Traces
+
+View distributed traces in the **Aspire Dashboard**:
+
+1. Run the sample with `aspire run`
+2. Open the Aspire Dashboard (URL shown in console)
+3. Click on **Traces** tab
+4. Submit a task through the frontend
+5. See the complete trace showing:
+   - HTTP request to POST /tasks
+   - RabbitMQ publish to tasks queue
+   - Worker processing span
+   - RabbitMQ publish to results queue
+   - API consuming result
+   - HTTP response
+
+### Messaging Semantic Conventions
+
+All RabbitMQ operations follow [OpenTelemetry Messaging Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/messaging/):
+
+- `messaging.system`: `rabbitmq`
+- `messaging.operation`: `publish`, `process`, `receive`
+- `messaging.destination.name`: Queue name (e.g., `tasks`, `results`, `task_status`)
+- `messaging.source.name`: Source queue for consumers
+- `messaging.message.id`: Task ID for correlation
+- `task.id`: Custom attribute for task identification
+- `task.type`: Custom attribute for task type (`analyze`, `report`)
+- `task.status`: Custom attribute for task status (`queued`, `processing`, `completed`)
+
+### Implementation Details
+
+**Node.js**: Uses `@opentelemetry/sdk-node` with automatic instrumentation + manual spans for RabbitMQ
+
+**Python**: Uses `opentelemetry-sdk` with manual span creation and context propagation
+
+**C#**: Uses `ActivitySource` (built into .NET) with `Aspire.RabbitMQ.Client` automatic instrumentation
 
 ## Learn More
 
 - [.NET Aspire Documentation](https://learn.microsoft.com/dotnet/aspire)
 - [RabbitMQ Tutorials](https://www.rabbitmq.com/tutorials)
 - [Aspire RabbitMQ Integration](https://learn.microsoft.com/dotnet/aspire/messaging/rabbitmq-component)
+- [OpenTelemetry Documentation](https://opentelemetry.io/docs/)
+- [OpenTelemetry Messaging Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/messaging/)

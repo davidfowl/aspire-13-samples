@@ -8,33 +8,79 @@ import numpy as np
 from aio_pika import connect_robust, Message, DeliveryMode
 from aio_pika.abc import AbstractIncomingMessage
 
+# OpenTelemetry imports
+from opentelemetry import trace, propagate
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import Resource, SERVICE_NAME, SERVICE_VERSION
+from opentelemetry.trace import Status, StatusCode
+
+# Initialize OpenTelemetry
+resource = Resource(attributes={
+    SERVICE_NAME: os.environ.get('OTEL_SERVICE_NAME', 'worker-python'),
+    SERVICE_VERSION: '1.0.0'
+})
+
+provider = TracerProvider(resource=resource)
+processor = BatchSpanProcessor(OTLPSpanExporter(
+    endpoint=os.environ.get('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://localhost:4317'),
+    insecure=True
+))
+provider.add_span_processor(processor)
+trace.set_tracer_provider(provider)
+
+tracer = trace.get_tracer(__name__, '1.0.0')
+
+print(f"[{datetime.now().isoformat()}] 📊 OpenTelemetry initialized")
+print(f"[{datetime.now().isoformat()}] 📤 Exporting to: {os.environ.get('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://localhost:4317')}")
+
 TASKS_QUEUE = 'tasks'
 RESULTS_QUEUE = 'results'
 TASK_STATUS_QUEUE = 'task_status'
 WORKER_NAME = 'python-worker'
 
 async def publish_task_status(channel, task_id, status, **additional_data):
-    """Publish task status update to RabbitMQ."""
-    try:
-        status_message = {
-            'taskId': task_id,
-            'status': status,
-            'worker': WORKER_NAME,
-            'timestamp': datetime.now().isoformat(),
-            **additional_data
-        }
+    """Publish task status update to RabbitMQ with trace context."""
+    with tracer.start_as_current_span(
+        'rabbitmq.publish task_status',
+        kind=trace.SpanKind.PRODUCER
+    ) as span:
+        try:
+            # Messaging semantic conventions
+            span.set_attribute('messaging.system', 'rabbitmq')
+            span.set_attribute('messaging.destination.name', TASK_STATUS_QUEUE)
+            span.set_attribute('messaging.operation', 'publish')
+            span.set_attribute('task.id', task_id)
+            span.set_attribute('task.status', status)
 
-        await channel.default_exchange.publish(
-            Message(
-                body=json.dumps(status_message).encode(),
-                delivery_mode=DeliveryMode.PERSISTENT
-            ),
-            routing_key=TASK_STATUS_QUEUE
-        )
-        
-        print(f"[{datetime.now().isoformat()}] Status update published: {task_id} -> {status}")
-    except Exception as e:
-        print(f"[{datetime.now().isoformat()}] Error publishing status: {e}", file=sys.stderr)
+            status_message = {
+                'taskId': task_id,
+                'status': status,
+                'worker': WORKER_NAME,
+                'timestamp': datetime.now().isoformat(),
+                **additional_data
+            }
+
+            # Inject trace context into message headers
+            headers = {}
+            propagate.inject(headers)
+
+            await channel.default_exchange.publish(
+                Message(
+                    body=json.dumps(status_message).encode(),
+                    delivery_mode=DeliveryMode.PERSISTENT,
+                    headers=headers
+                ),
+                routing_key=TASK_STATUS_QUEUE
+            )
+
+            print(f"[{datetime.now().isoformat()}] Status update published: {task_id} -> {status}")
+            span.set_status(Status(StatusCode.OK))
+        except Exception as e:
+            print(f"[{datetime.now().isoformat()}] Error publishing status: {e}", file=sys.stderr)
+            span.record_exception(e)
+            span.set_status(Status(StatusCode.ERROR, str(e)))
 
 async def process_task(task_data: dict) -> dict:
     """Process data analysis tasks using pandas."""
@@ -99,50 +145,98 @@ async def process_task(task_data: dict) -> dict:
         }
 
 async def on_message(message: AbstractIncomingMessage, channel):
-    """Handle incoming task messages."""
+    """Handle incoming task messages with distributed tracing."""
     async with message.process():
-        try:
-            task = json.loads(message.body.decode())
-            task_id = task.get('taskId')
-            task_type = task.get('type')
+        # Extract trace context from message headers
+        headers_dict = dict(message.headers) if message.headers else {}
+        ctx = propagate.extract(headers_dict)
 
-            print(f"[{datetime.now().isoformat()}] Processing task {task_id} (type: {task_type})")
+        with tracer.start_as_current_span(
+            'rabbitmq.process task',
+            context=ctx,
+            kind=trace.SpanKind.CONSUMER
+        ) as span:
+            try:
+                # Messaging semantic conventions
+                span.set_attribute('messaging.system', 'rabbitmq')
+                span.set_attribute('messaging.source.name', TASKS_QUEUE)
+                span.set_attribute('messaging.operation', 'process')
 
-            # Publish processing status
-            await publish_task_status(channel, task_id, 'processing')
+                task = json.loads(message.body.decode())
+                task_id = task.get('taskId')
+                task_type = task.get('type')
 
-            # Only process 'analyze' tasks
-            if task_type != 'analyze':
-                print(f"[{datetime.now().isoformat()}] Skipping task {task_id} - not an analyze task")
-                await publish_task_status(channel, task_id, 'skipped', reason='not an analyze task')
-                return
+                span.set_attribute('task.id', task_id)
+                span.set_attribute('task.type', task_type)
+                span.set_attribute('messaging.message.id', task_id)
 
-            # Process the task
-            result = await process_task(task)
+                print(f"[{datetime.now().isoformat()}] Processing task {task_id} (type: {task_type})")
 
-            # Send result back
-            result_message = {
-                'taskId': task_id,
-                'worker': WORKER_NAME,
-                'result': result,
-                'completedAt': datetime.now().isoformat()
-            }
+                # Publish processing status
+                await publish_task_status(channel, task_id, 'processing')
 
-            await channel.default_exchange.publish(
-                Message(
-                    body=json.dumps(result_message).encode(),
-                    delivery_mode=DeliveryMode.PERSISTENT
-                ),
-                routing_key=RESULTS_QUEUE
-            )
+                # Only process 'analyze' tasks
+                if task_type != 'analyze':
+                    print(f"[{datetime.now().isoformat()}] Skipping task {task_id} - not an analyze task")
+                    await publish_task_status(channel, task_id, 'skipped', reason='not an analyze task')
+                    span.add_event('task.skipped', {'reason': 'not an analyze task'})
+                    span.set_status(Status(StatusCode.OK))
+                    return
 
-            print(f"[{datetime.now().isoformat()}] Completed task {task_id}")
+                # Process the task with a child span
+                with tracer.start_as_current_span('task.process_data') as process_span:
+                    process_span.set_attribute('task.id', task_id)
+                    result = await process_task(task)
 
-        except Exception as e:
-            print(f"[{datetime.now().isoformat()}] Error processing message: {e}", file=sys.stderr)
-            # Publish error status
-            if 'task_id' in locals():
-                await publish_task_status(channel, task_id, 'error', error=str(e))
+                    if 'error' in result:
+                        process_span.set_attribute('task.error', result['error'])
+                        process_span.set_status(Status(StatusCode.ERROR, result['error']))
+                    else:
+                        process_span.set_status(Status(StatusCode.OK))
+
+                # Send result back with trace context
+                with tracer.start_as_current_span(
+                    'rabbitmq.publish results',
+                    kind=trace.SpanKind.PRODUCER
+                ) as publish_span:
+                    publish_span.set_attribute('messaging.system', 'rabbitmq')
+                    publish_span.set_attribute('messaging.destination.name', RESULTS_QUEUE)
+                    publish_span.set_attribute('messaging.operation', 'publish')
+                    publish_span.set_attribute('task.id', task_id)
+
+                    result_message = {
+                        'taskId': task_id,
+                        'worker': WORKER_NAME,
+                        'result': result,
+                        'completedAt': datetime.now().isoformat()
+                    }
+
+                    # Inject trace context into result message
+                    result_headers = {}
+                    propagate.inject(result_headers)
+
+                    await channel.default_exchange.publish(
+                        Message(
+                            body=json.dumps(result_message).encode(),
+                            delivery_mode=DeliveryMode.PERSISTENT,
+                            headers=result_headers
+                        ),
+                        routing_key=RESULTS_QUEUE
+                    )
+
+                    print(f"[{datetime.now().isoformat()}] Completed task {task_id}")
+                    publish_span.set_status(Status(StatusCode.OK))
+
+                span.add_event('task.completed')
+                span.set_status(Status(StatusCode.OK))
+
+            except Exception as e:
+                print(f"[{datetime.now().isoformat()}] Error processing message: {e}", file=sys.stderr)
+                span.record_exception(e)
+                span.set_status(Status(StatusCode.ERROR, str(e)))
+                # Publish error status
+                if 'task_id' in locals():
+                    await publish_task_status(channel, task_id, 'error', error=str(e))
 
 async def main():
     """Main worker loop."""

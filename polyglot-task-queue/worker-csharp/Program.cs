@@ -3,10 +3,16 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using OpenTelemetry.Context.Propagation;
+using OpenTelemetry;
+using OpenTelemetry.Trace;
 
 var builder = Host.CreateApplicationBuilder(args);
+
+builder.AddServiceDefaults();
 
 builder.AddRabbitMQClient("messaging");
 
@@ -22,13 +28,25 @@ class ReportWorker(IConnection connection, ILogger<ReportWorker> logger) : Backg
     private const string TaskStatusQueue = "task_status";
     private const string WorkerName = "csharp-worker";
 
+    // ActivitySource for distributed tracing
+    private static readonly ActivitySource ActivitySource = new("TaskQueue.Worker.CSharp", "1.0.0");
+    private static readonly TextMapPropagator Propagator = Propagators.DefaultTextMapPropagator;
+
     // Use JsonSerializerDefaults.Web for consistent camelCase JSON serialization
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private async Task PublishTaskStatusAsync(IChannel channel, string taskId, string status, object? additionalData = null, CancellationToken cancellationToken = default)
     {
+        using var activity = ActivitySource.StartActivity("rabbitmq.publish task_status", ActivityKind.Producer);
         try
         {
+            // Messaging semantic conventions
+            activity?.SetTag("messaging.system", "rabbitmq");
+            activity?.SetTag("messaging.destination.name", TaskStatusQueue);
+            activity?.SetTag("messaging.operation", "publish");
+            activity?.SetTag("task.id", taskId);
+            activity?.SetTag("task.status", status);
+
             var statusMessage = new
             {
                 TaskId = taskId,
@@ -41,18 +59,31 @@ class ReportWorker(IConnection connection, ILogger<ReportWorker> logger) : Backg
             var statusJson = JsonSerializer.Serialize(statusMessage, JsonOptions);
             var statusBody = Encoding.UTF8.GetBytes(statusJson);
 
+            // Inject trace context into message headers
+            var properties = new BasicProperties();
+            var headers = new Dictionary<string, object?>();
+            Propagator.Inject(new PropagationContext(activity?.Context ?? default, Baggage.Current), headers, (dict, key, value) =>
+            {
+                dict[key] = value;
+            });
+            properties.Headers = headers;
+
             await channel.BasicPublishAsync(
                 exchange: string.Empty,
                 routingKey: TaskStatusQueue,
                 mandatory: false,
+                basicProperties: properties,
                 body: statusBody,
                 cancellationToken: cancellationToken);
 
             logger.LogInformation("[{Time}] Status update published: {TaskId} -> {Status}", DateTime.Now, taskId, status);
+            activity?.SetStatus(ActivityStatusCode.Ok);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "[{Time}] Error publishing status for task {TaskId}", DateTime.Now, taskId);
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            activity?.RecordException(ex);
         }
     }
 
@@ -97,8 +128,29 @@ class ReportWorker(IConnection connection, ILogger<ReportWorker> logger) : Backg
         var consumer = new AsyncEventingBasicConsumer(channel);
         consumer.ReceivedAsync += async (model, ea) =>
         {
+            // Extract trace context from message headers
+            var parentContext = Propagator.Extract(default, ea.BasicProperties.Headers, (headers, key) =>
+            {
+                if (headers != null && headers.TryGetValue(key, out var value))
+                {
+                    return value is byte[] bytes ? [Encoding.UTF8.GetString(bytes)] : [value?.ToString() ?? string.Empty];
+                }
+                return [];
+            });
+
+            // Start activity linked to parent context
+            using var activity = ActivitySource.StartActivity(
+                "rabbitmq.process task",
+                ActivityKind.Consumer,
+                parentContext.ActivityContext);
+
             try
             {
+                // Messaging semantic conventions
+                activity?.SetTag("messaging.system", "rabbitmq");
+                activity?.SetTag("messaging.source.name", TasksQueue);
+                activity?.SetTag("messaging.operation", "process");
+
                 var messageBody = Encoding.UTF8.GetString(ea.Body.Span);
                 logger.LogInformation("[{Time}] Received message: {Message}", DateTime.Now, messageBody);
 
@@ -108,8 +160,13 @@ class ReportWorker(IConnection connection, ILogger<ReportWorker> logger) : Backg
                 {
                     logger.LogWarning("[{Time}] Received invalid task message", DateTime.Now);
                     await channel.BasicAckAsync(ea.DeliveryTag, false, stoppingToken);
+                    activity?.SetStatus(ActivityStatusCode.Error, "Invalid task message");
                     return;
                 }
+
+                activity?.SetTag("task.id", task.TaskId);
+                activity?.SetTag("task.type", task.Type);
+                activity?.SetTag("messaging.message.id", task.TaskId);
 
                 logger.LogInformation("[{Time}] Processing task {TaskId} (type: {Type})",
                     DateTime.Now, task.TaskId, task.Type);
@@ -122,37 +179,66 @@ class ReportWorker(IConnection connection, ILogger<ReportWorker> logger) : Backg
                 {
                     logger.LogInformation("[{Time}] Skipping task {TaskId} - not a report task",
                         DateTime.Now, task.TaskId);
-                    
-                    await PublishTaskStatusAsync(channel, task.TaskId!, "skipped", 
+
+                    await PublishTaskStatusAsync(channel, task.TaskId!, "skipped",
                         new { reason = "not a report task" }, stoppingToken);
-                    
+
                     await channel.BasicAckAsync(ea.DeliveryTag, false, stoppingToken);
+                    activity?.AddEvent(new ActivityEvent("task.skipped", tags: new ActivityTagsCollection { { "reason", "not a report task" } }));
+                    activity?.SetStatus(ActivityStatusCode.Ok);
                     return;
                 }
 
-                // Process the task
-                var result = await ProcessReportTask(task);
-
-                // Send result back
-                var resultMessage = new ResultMessage
+                // Process the task with a child activity
+                using (var processActivity = ActivitySource.StartActivity("task.process_report"))
                 {
-                    TaskId = task.TaskId,
-                    Worker = WorkerName,
-                    Result = result,
-                    CompletedAt = DateTime.Now
-                };
+                    processActivity?.SetTag("task.id", task.TaskId);
+                    var result = await ProcessReportTask(task);
+                    processActivity?.SetStatus(ActivityStatusCode.Ok);
 
-                var resultJson = JsonSerializer.Serialize(resultMessage, JsonOptions);
-                var resultBody = Encoding.UTF8.GetBytes(resultJson);
+                    // Send result back with trace context
+                    using (var publishActivity = ActivitySource.StartActivity("rabbitmq.publish results", ActivityKind.Producer))
+                    {
+                        publishActivity?.SetTag("messaging.system", "rabbitmq");
+                        publishActivity?.SetTag("messaging.destination.name", ResultsQueue);
+                        publishActivity?.SetTag("messaging.operation", "publish");
+                        publishActivity?.SetTag("task.id", task.TaskId);
 
-                await channel.BasicPublishAsync(
-                    exchange: string.Empty,
-                    routingKey: ResultsQueue,
-                    mandatory: false,
-                    body: resultBody,
-                    cancellationToken: stoppingToken);
+                        var resultMessage = new ResultMessage
+                        {
+                            TaskId = task.TaskId,
+                            Worker = WorkerName,
+                            Result = result,
+                            CompletedAt = DateTime.Now
+                        };
+
+                        var resultJson = JsonSerializer.Serialize(resultMessage, JsonOptions);
+                        var resultBody = Encoding.UTF8.GetBytes(resultJson);
+
+                        // Inject trace context into result message
+                        var resultProperties = new BasicProperties();
+                        var resultHeaders = new Dictionary<string, object?>();
+                        Propagator.Inject(new PropagationContext(publishActivity?.Context ?? default, Baggage.Current), resultHeaders, (dict, key, value) =>
+                        {
+                            dict[key] = value;
+                        });
+                        resultProperties.Headers = resultHeaders;
+
+                        await channel.BasicPublishAsync(
+                            exchange: string.Empty,
+                            routingKey: ResultsQueue,
+                            mandatory: false,
+                            basicProperties: resultProperties,
+                            body: resultBody,
+                            cancellationToken: stoppingToken);
+
+                        publishActivity?.SetStatus(ActivityStatusCode.Ok);
+                    }
+                }
 
                 logger.LogInformation("[{Time}] Completed task {TaskId}", DateTime.Now, task.TaskId);
+                activity?.AddEvent(new ActivityEvent("task.completed"));
+                activity?.SetStatus(ActivityStatusCode.Ok);
 
                 await channel.BasicAckAsync(ea.DeliveryTag, false, stoppingToken);
             }
