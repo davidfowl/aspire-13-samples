@@ -14,7 +14,7 @@ flowchart LR
 **Publish Mode:**
 ```mermaid
 flowchart LR
-    Browser --> YARP[YARP<br/>with embedded<br/>static files]
+    Browser --> YARP[YARP serving<br/>Vite build output<br/>'npm run build']
 ```
 
 ## What This Demonstrates

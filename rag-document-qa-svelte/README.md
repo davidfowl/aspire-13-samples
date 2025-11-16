@@ -16,7 +16,7 @@ flowchart LR
 **Publish Mode:**
 ```mermaid
 flowchart LR
-    User --> API[FastAPI<br/>with embedded<br/>static files]
+    User --> API[FastAPI serving<br/>Vite build output<br/>'npm run build']
     API --> Qdrant[Qdrant Vector DB]
     API --> OpenAI[OpenAI API]
 ```

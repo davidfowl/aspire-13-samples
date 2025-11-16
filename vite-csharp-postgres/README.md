@@ -15,7 +15,7 @@ flowchart LR
 **Publish Mode:**
 ```mermaid
 flowchart LR
-    Browser --> API[Minimal API<br/>with embedded<br/>static files]
+    Browser --> API[Minimal API serving<br/>Vite build output<br/>'npm run build']
     API --> PostgreSQL
 ```
 

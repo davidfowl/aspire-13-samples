@@ -15,7 +15,7 @@ flowchart LR
 **Publish Mode:**
 ```mermaid
 flowchart LR
-    Browser --> YARP[YARP<br/>with embedded<br/>static files]
+    Browser --> YARP[YARP serving<br/>Vite build output<br/>'npm run build']
     YARP -->|/api/*| FastAPI[FastAPI Backend]
 ```
 
@@ -26,7 +26,7 @@ flowchart LR
 - **AddYarp**: Single endpoint with path-based routing
 - **WithTransformPathRemovePrefix**: Strip `/api` prefix before forwarding
 - **PublishWithStaticFiles**: Frontend embedded in YARP for publish mode
-- **Dual-Mode Operation**: Vite HMR in run mode, static files in publish mode
+- **Dual-Mode Operation**: Vite HMR in run mode, Vite build output in publish mode
 - **Polyglot Fullstack**: JavaScript + Python working together
 
 ## Running

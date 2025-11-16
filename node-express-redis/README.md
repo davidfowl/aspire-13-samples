@@ -16,7 +16,7 @@ flowchart LR
 **Publish Mode:**
 ```mermaid
 flowchart LR
-    Browser --> YARP[YARP<br/>with embedded<br/>static files]
+    Browser --> YARP[YARP serving<br/>Vite build output<br/>'npm run build']
     YARP -->|/api/*| Express[Express API]
     Express --> Redis
 ```
@@ -28,7 +28,7 @@ flowchart LR
 - **AddYarp**: Single endpoint for frontend and API with path transforms
 - **AddRedis**: In-memory data store with automatic connection injection
 - **PublishWithStaticFiles**: Frontend embedded in YARP for publish mode
-- **Dual-Mode Operation**: Vite HMR in run mode, static files in publish mode
+- **Dual-Mode Operation**: Vite HMR in run mode, Vite build output in publish mode
 
 ## Running
 
