@@ -7,6 +7,10 @@
 #:package Aspire.Hosting.JavaScript@13.0.0
 #:package Aspire.Hosting.Azure.AppContainers@13.0.0
 
+using Aspire.Hosting.Azure;
+using Azure.Provisioning.AppContainers;
+using Azure.Provisioning.Expressions;
+
 var builder = DistributedApplication.CreateBuilder(args);
 
 builder.AddAzureContainerAppEnvironment("env");
@@ -52,7 +56,7 @@ var api = builder.AddCSharpApp("api", "./api")
     });
 
 // Worker: Container Apps Job for queue-triggered thumbnail generation
-// Runs every 4 minutes with 2-minute max duration to avoid overlapping
+// Event-driven: starts when messages arrive, exits within ~5 seconds when queue is empty
 var worker = builder.AddCSharpApp("worker", "./worker")
     .WithReference(blobs)
     .WithReference(queues)
@@ -67,7 +71,30 @@ if (builder.ExecutionContext.IsRunMode)
 }
 else
 {
-    worker.PublishAsScheduledAzureContainerAppJob("*/4 * * * *");
+    // In publish mode, use event-driven scaling based on queue depth
+    worker.PublishAsAzureContainerAppJob((infra, job) =>
+    {
+        var accountNameParameter = queues.Resource.Parent.NameOutputReference.AsProvisioningParameter(infra);
+
+        // Resolve the identity annotation added to the worker app
+        if (!worker.Resource.TryGetLastAnnotation<AppIdentityAnnotation>(out var identityAnnotation))
+        {
+            throw new InvalidOperationException("Identity annotation not found.");
+        }
+
+        job.Configuration.TriggerType = ContainerAppJobTriggerType.Event;
+        job.Configuration.EventTriggerConfig.Scale.Rules.Add(new ContainerAppJobScaleRule
+        {
+            Name = "queue-rule",
+            JobScaleRuleType = "azure-queue",
+            Metadata = new ObjectExpression(
+                new PropertyExpression("accountName", new IdentifierExpression(accountNameParameter.BicepIdentifier)),
+                new PropertyExpression("queueName", new StringLiteralExpression("thumbnails")),
+                new PropertyExpression("queueLength", new IntLiteralExpression(1))
+            ),
+            Identity = identityAnnotation.IdentityResource.Id.AsProvisioningParameter(infra)
+        });
+    });
 }
 
 // Frontend: Vite+React for upload and gallery UI

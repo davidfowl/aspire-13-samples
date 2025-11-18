@@ -27,9 +27,8 @@ public class ThumbnailWorker(
     private const int ThumbnailHeight = 300;
     private const long MaxImageSizeBytes = 20 * 1024 * 1024; // 20 MB - slightly larger than upload limit
     private const int MaxRetryCount = 3;
-    private const int MaxEmptyPolls = 6;        // Poll up to 6 times
-    private const int EmptyPollWaitSeconds = 20; // Wait 20 seconds between polls (total: 2 minutes)
-    private const int GracePeriodSeconds = 30;
+    private const int MaxEmptyPolls = 2;        // Poll up to 2 times (event-triggered)
+    private const int EmptyPollWaitSeconds = 5; // Wait 5 seconds between polls (total: ~5 seconds)
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -91,10 +90,7 @@ public class ThumbnailWorker(
 
     private async Task ExecuteScheduledAsync(CancellationToken stoppingToken)
     {
-        var maxRunDuration = TimeSpan.FromMinutes(2);
-        var gracePeriod = TimeSpan.FromSeconds(GracePeriodSeconds);
-
-        _logger.LogInformation("Thumbnail worker started in SCHEDULED mode, will run for max {Duration} minutes", maxRunDuration.TotalMinutes);
+        _logger.LogInformation("Thumbnail worker started in EVENT-TRIGGERED mode");
 
         var queueClient = _queueService.GetQueueClient("thumbnails");
         await queueClient.CreateIfNotExistsAsync(cancellationToken: stoppingToken);
@@ -105,14 +101,6 @@ public class ThumbnailWorker(
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            var elapsed = DateTime.UtcNow - startTime;
-            if (elapsed >= maxRunDuration)
-            {
-                _logger.LogInformation("Max run duration reached ({Duration} minutes), exiting. Processed {Count} messages",
-                    maxRunDuration.TotalMinutes, processedCount);
-                break;
-            }
-
             var response = await queueClient.ReceiveMessagesAsync(
                 maxMessages: 10,
                 visibilityTimeout: TimeSpan.FromMinutes(5),
@@ -127,7 +115,7 @@ public class ThumbnailWorker(
                 if (emptyPollCount >= MaxEmptyPolls)
                 {
                     _logger.LogInformation("Queue empty after {PollCount} attempts, exiting. Processed {Count} messages in {Elapsed}",
-                        emptyPollCount, processedCount, elapsed);
+                        emptyPollCount, processedCount, DateTime.UtcNow - startTime);
                     break;
                 }
 
@@ -142,16 +130,6 @@ public class ThumbnailWorker(
 
             foreach (var message in messages)
             {
-                var currentElapsed = DateTime.UtcNow - startTime;
-                var estimatedTimeRemaining = maxRunDuration - currentElapsed;
-
-                if (estimatedTimeRemaining < gracePeriod)
-                {
-                    _logger.LogInformation("Approaching timeout ({RemainingSeconds}s left), finishing current batch gracefully",
-                        estimatedTimeRemaining.TotalSeconds);
-                    break;
-                }
-
                 await ProcessMessageWithRetryAsync(message, queueClient, stoppingToken);
                 processedCount++;
             }

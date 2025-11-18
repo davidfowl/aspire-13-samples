@@ -55,8 +55,8 @@ Todo app with YARP routing between Python backend and JavaScript frontend. **(Fa
 
 ### Azure
 
-**[image-gallery](./azure/image-gallery)** - Image gallery with Container Apps Jobs
-Upload images to Azure Blob Storage with queue-triggered thumbnail generation. Demonstrates dual-mode resources (Azurite emulator in run mode, real Azure in publish mode), Container Apps Jobs with scale-to-zero, and distributed processing. **(Azure Blob Storage, Azure SQL, Azure Storage Queues, Container Apps Jobs, Vite+React, event-driven scaling, dual-mode development)**
+**[image-gallery](./azure/image-gallery)** - Image gallery with event-triggered Container Apps Jobs
+Upload images to Azure Blob Storage with queue-triggered thumbnail generation. Demonstrates dual-mode resources (Azurite emulator in run mode, real Azure in publish mode), event-driven Container Apps Jobs that scale based on queue depth, and distributed processing. **(Azure Blob Storage, Azure SQL, Azure Storage Queues, Container Apps Jobs, Vite+React, event-driven scaling, queue triggers, dual-mode development)**
 
 ## Learn More
 

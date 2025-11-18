@@ -23,9 +23,9 @@ flowchart LR
     API --> Blobs[Azure Blob Storage]
     API --> Queue[Azure Storage Queue]
     API --> SQL[Azure SQL]
-    Job[Container Apps Job<br/>Runs every 4 min<br/>Max 2 min duration] --> Blobs
+    Job[Container Apps Job<br/>Event-triggered<br/>Scales on queue depth] --> Blobs
     Job --> SQL
-    Queue -.Trigger.-> Job
+    Queue -.Queue Trigger.-> Job
 ```
 
 ## What This Demonstrates
@@ -33,9 +33,9 @@ flowchart LR
 - **AddAzureStorage**: Blob storage and queues with automatic `.RunAsEmulator()` for local development
 - **AddAzureSqlServer**: SQL Server container in run mode, Azure SQL in publish mode with `.RunAsContainer()`
 - **PublishAsAzureContainerApp**: API scales to zero when idle, reducing costs
-- **PublishAsScheduledAzureContainerAppJob**: Worker runs every 4 minutes with 2-minute max duration (avoids overlapping jobs)
-- **Dual-Mode Worker**: Continuous polling (5s) in run mode for instant feedback, scheduled execution in publish mode for cost efficiency
-- **Cost-Balanced Design**: Balances cost (exits when idle) with user experience (frequent polling in production, instant in dev)
+- **PublishAsAzureContainerAppJob**: Event-triggered worker that automatically scales based on queue depth
+- **Queue-Triggered Scaling**: Job instances start instantly when messages arrive, exit within ~5 seconds when queue is empty
+- **Dual-Mode Worker**: Continuous polling (5s) in run mode for instant feedback, event-driven scaling in publish mode for maximum cost efficiency
 - **PublishWithContainerFiles**: Vite frontend embedded in API container
 - **WaitFor**: Ensures dependencies start in correct order
 - **OpenTelemetry**: Distributed tracing across upload → queue → worker pipeline
@@ -89,12 +89,28 @@ api.PublishAsAzureContainerApp((infra, app) =>
 });
 ```
 
-**Scheduled Container App Job** - Worker runs every 4 minutes:
+**Event-Triggered Container App Job** - Worker scales based on queue depth:
 ```csharp
-worker.PublishAsScheduledAzureContainerAppJob("*/4 * * * *");
+worker.PublishAsAzureContainerAppJob((infra, job) =>
+{
+    var accountNameParameter = queues.Resource.Parent.NameOutputReference.AsProvisioningParameter(infra);
+
+    job.Configuration.TriggerType = ContainerAppJobTriggerType.Event;
+    job.Configuration.EventTriggerConfig.Scale.Rules.Add(new ContainerAppJobScaleRule
+    {
+        Name = "queue-rule",
+        JobScaleRuleType = "azure-queue",
+        Metadata = new ObjectExpression(
+            new PropertyExpression("accountName", new IdentifierExpression(accountNameParameter.BicepIdentifier)),
+            new PropertyExpression("queueName", new StringLiteralExpression("thumbnails")),
+            new PropertyExpression("queueLength", new IntLiteralExpression(1))
+        ),
+        Identity = identityAnnotation.IdentityResource.Id.AsProvisioningParameter(infra)
+    });
+});
 ```
 
-**Dual-Mode Worker** - Continuous in run mode, scheduled in publish mode:
+**Dual-Mode Worker** - Continuous in run mode, event-triggered in publish mode:
 ```csharp
 // In run mode: runs continuously for instant local feedback
 if (builder.ExecutionContext.IsRunMode)
@@ -111,8 +127,9 @@ if (runContinuously)
 }
 else
 {
-    // Production: poll up to 6 times (2 minutes), then exit to save costs
-    if (emptyPollCount >= MaxEmptyPolls)
+    // Production: event-triggered, poll 1-2 times then exit if empty
+    // New job instances start automatically when messages arrive
+    if (emptyPollCount >= MaxEmptyPolls) // MaxEmptyPolls = 2
     {
         _logger.LogInformation("Queue empty, exiting");
         break;
@@ -120,7 +137,7 @@ else
 }
 ```
 
-**Graceful Shutdown** - Scheduled mode always stops, exceptions crash naturally:
+**Graceful Shutdown** - Event-triggered mode always stops, exceptions crash naturally:
 ```csharp
 if (_configuration.GetValue<bool>("WORKER_RUN_CONTINUOUSLY"))
 {
@@ -131,12 +148,13 @@ else
 {
     try
     {
-        // Scheduled mode: always shutdown after completion
+        // Event-triggered mode: process messages until queue empty, then shutdown
         await ExecuteScheduledAsync(stoppingToken);
     }
     finally
     {
-        // Always stop application in scheduled mode (success or exception)
+        // Always stop application when done (success or exception)
+        // New instances will start automatically when queue has messages
         _hostApplicationLifetime.StopApplication();
     }
 }
