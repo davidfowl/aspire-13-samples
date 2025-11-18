@@ -17,10 +17,19 @@ builder.AddAzureQueueServiceClient("queues");
 // Add OpenAPI support
 builder.Services.AddOpenApi();
 
+// Add antiforgery services for XSRF protection
+builder.Services.AddAntiforgery(options =>
+{
+    options.HeaderName = "RequestVerificationToken";
+});
+
 // Register database initializer as hosted service
 builder.Services.AddHostedService<DatabaseInitializer>();
 
 var app = builder.Build();
+
+// Add antiforgery middleware
+app.UseAntiforgery();
 
 app.UseFileServer();
 

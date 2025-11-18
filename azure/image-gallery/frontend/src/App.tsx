@@ -17,11 +17,23 @@ function App() {
   const dragCounter = useRef(0)
   const [isDragging, setIsDragging] = useState(false)
   const [selectedImage, setSelectedImage] = useState<Image | null>(null)
+  const [antiforgeryToken, setAntiforgeryToken] = useState<string | null>(null)
 
-  // Fetch images on mount
+  // Fetch antiforgery token and images on mount
   useEffect(() => {
+    fetchAntiforgeryToken()
     fetchImages()
   }, [])
+
+  const fetchAntiforgeryToken = async () => {
+    try {
+      const response = await fetch('/api/antiforgery')
+      const data = await response.json()
+      setAntiforgeryToken(data.token)
+    } catch (error) {
+      console.error('Failed to fetch antiforgery token:', error)
+    }
+  }
 
   // Poll for thumbnail updates every 3 seconds
   useEffect(() => {
@@ -51,6 +63,11 @@ function App() {
     const file = files[0]
     if (!file.type.startsWith('image/')) {
       alert('Please select an image file')
+      return
+    }
+
+    if (!antiforgeryToken) {
+      alert('Security token not available. Please refresh the page.')
       return
     }
 
@@ -90,6 +107,7 @@ function App() {
       })
 
       xhr.open('POST', '/api/images')
+      xhr.setRequestHeader('RequestVerificationToken', antiforgeryToken)
       xhr.send(formData)
     } catch (error) {
       console.error('Upload failed:', error)
@@ -132,8 +150,18 @@ function App() {
   const handleDelete = async (id: number) => {
     if (!confirm('Delete this image?')) return
 
+    if (!antiforgeryToken) {
+      alert('Security token not available. Please refresh the page.')
+      return
+    }
+
     try {
-      await fetch(`/api/images/${id}`, { method: 'DELETE' })
+      await fetch(`/api/images/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'RequestVerificationToken': antiforgeryToken
+        }
+      })
       fetchImages()
     } catch (error) {
       console.error('Delete failed:', error)

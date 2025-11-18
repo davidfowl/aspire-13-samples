@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Antiforgery;
 using Azure.Storage.Blobs;
 using Azure.Storage.Queues;
 using Api.Data;
@@ -16,6 +17,13 @@ public static class ImageEndpoints
     public static WebApplication MapImages(this WebApplication app)
     {
         var group = app.MapGroup("/api");
+
+        // Get antiforgery token for client-side requests
+        group.MapGet("/antiforgery", (IAntiforgery antiforgery, HttpContext context) =>
+        {
+            var tokens = antiforgery.GetAndStoreTokens(context);
+            return Results.Ok(new { token = tokens.RequestToken });
+        });
 
         // Get all images (with pagination)
         group.MapGet("/images", async (ImageDbContext db, int? skip = null, int? take = null) =>
@@ -157,8 +165,7 @@ public static class ImageEndpoints
                 logger.LogError(ex, "Failed to upload image");
                 return Results.Problem("Failed to upload image");
             }
-        })
-        .DisableAntiforgery(); // Required for file uploads
+        });
 
         // Delete image
         group.MapDelete("/images/{id}", async (
