@@ -1,6 +1,6 @@
-# Image Gallery with Azure Container Apps Jobs
+# Image Gallery with Event-Triggered Azure Container Apps Jobs
 
-Upload images to Azure Blob Storage with queue-triggered thumbnail generation. Background worker processes thumbnails using Container Apps Jobs.
+Upload images to Azure Blob Storage with queue-triggered thumbnail generation. Demonstrates event-driven Container Apps Jobs with queue-based autoscaling, managed identity authentication, and Azure SQL free tier - **can run entirely within Azure free tier limits**.
 
 ## Architecture
 
@@ -28,16 +28,33 @@ flowchart LR
     Queue -.Queue Trigger.-> Job
 ```
 
+## How It Works
+
+### Event-Driven Thumbnail Processing
+
+1. **Upload**: User uploads image → API saves to Azure Blob Storage and metadata to Azure SQL
+2. **Queue**: API enqueues thumbnail generation message to Azure Storage Queue
+3. **Trigger**: Azure monitors queue depth and automatically starts a Container Apps Job instance
+4. **Process**: Job processes messages in batches (up to 10), generates thumbnails using ImageSharp
+5. **Scale Down**: After 2 empty polls (~5 seconds), job exits; new instances start automatically when messages arrive
+
+### Local Development vs Production
+
+**Production (Event-Triggered):**
+- Job starts when queue depth > 0, exits within ~5 seconds when empty
+- API and worker both scale to zero when idle
+
+**Local Development (Continuous):**
+- Worker runs continuously, polls every 5 seconds
+- Instant feedback with Azurite emulator and SQL Server container
+
 ## What This Demonstrates
 
-- **AddAzureStorage**: Blob storage and queues with automatic `.RunAsEmulator()` for local development
-- **AddAzureSqlServer**: SQL Server container in run mode, Azure SQL in publish mode with `.RunAsContainer()`
-- **PublishAsAzureContainerApp**: API scales to zero when idle, reducing costs
-- **PublishAsAzureContainerAppJob**: Event-triggered worker that automatically scales based on queue depth
-- **Queue-Triggered Scaling**: Job instances start instantly when messages arrive, exit within ~5 seconds when queue is empty
-- **Dual-Mode Worker**: Continuous polling (5s) in run mode for instant feedback, event-driven scaling in publish mode for maximum cost efficiency
-- **PublishWithContainerFiles**: Vite frontend embedded in API container
-- **WaitFor**: Ensures dependencies start in correct order
+- **Event-Driven Jobs**: Container Apps Jobs with queue-based autoscaling rules using Azure.Provisioning APIs
+- **Dual-Mode Resources**: Azurite/SQL Server containers locally, Azure services in production (`.RunAsEmulator()`, `.RunAsContainer()`)
+- **Free Tier Deployment**: Azure SQL free tier with serverless auto-pause, Container Apps scale-to-zero
+- **Managed Identity**: Password-less authentication to all Azure resources (Storage, SQL, Queues)
+- **Polyglot Stack**: Vite+React frontend embedded in C# API container, ImageSharp for image processing
 - **OpenTelemetry**: Distributed tracing across upload → queue → worker pipeline
 
 ## Running
@@ -56,15 +73,15 @@ aspire deploy   # Deploy to Azure Container Apps
 
 ## Security Notes
 
-This is a sample application for demonstration purposes. For production use, consider:
+**Implemented:**
+- ✅ **Managed Identity**: Password-less authentication to all Azure resources (no connection strings or secrets)
+- ✅ **Input Validation**: 10 MB file size limit, extension allowlist (.jpg, .jpeg, .png, .gif, .webp)
+- ✅ **Filename Sanitization**: Path traversal prevention, 255 char limit
+- ✅ **Resource Limits**: Pagination (max 100 items), retry limits (3 attempts), size checks (20 MB max)
 
-- **Authentication & Authorization**: Add authentication to protect upload/delete endpoints
-- **Rate Limiting**: Implement rate limiting to prevent abuse
-- **CORS Policy**: Configure CORS for allowed origins only
-- **Blob Access Control**: Use SAS tokens with limited permissions instead of direct URLs
-- **Input Validation**: File size limited to 10 MB, formats restricted to .jpg, .jpeg, .png, .gif, .webp
-- **Content Validation**: Filenames are sanitized to prevent path traversal attacks
-- **Resource Limits**: Pagination (max 100 items), retry limits (3 attempts), size checks before processing
+**Not Implemented (Required for Production):**
+- ❌ **Authentication & Authorization**: Endpoints are public - anyone can upload/delete
+- ❌ **Rate Limiting**: No protection against abuse or DoS
 
 ## Key Aspire Patterns
 
@@ -75,12 +92,14 @@ var blobs = storage.AddBlobContainer("images");
 var queues = storage.AddQueues("queues");
 ```
 
-**Azure SQL Dual Mode** - SQL Server container locally, Azure SQL in production:
+**Azure SQL Dual Mode** - SQL Server container locally, Azure SQL free tier in production:
 ```csharp
 var sql = builder.AddAzureSqlServer("sql")
     .RunAsContainer()
     .AddDatabase("imagedb");
 ```
+
+Defaults to Azure SQL free tier with serverless auto-pause (SKU: GP_S_Gen5_2).
 
 **Scale to Zero** - API only runs when handling requests:
 ```csharp
@@ -90,51 +109,56 @@ api.PublishAsAzureContainerApp((infra, app) =>
 });
 ```
 
-**Event-Triggered Container App Job** - Worker scales based on queue depth:
+**Event-Triggered Container App Job** - Direct control over Azure resources with Azure.Provisioning libraries:
+
+This example demonstrates using the **Azure.Provisioning** libraries to directly configure low-level Azure resources (Bicep/ARM) from the AppHost. This provides complete flexibility and control when Aspire's higher-level APIs don't expose specific features.
+
 ```csharp
 worker.PublishAsAzureContainerAppJob((infra, job) =>
 {
+    // Direct access to Azure Provisioning APIs - full control over Bicep/ARM templates
+
+    // Get storage account name for queue authentication
     var accountNameParameter = queues.Resource.Parent.NameOutputReference.AsProvisioningParameter(infra);
 
+    // Configure event-driven trigger using Container Apps Job APIs
     job.Configuration.TriggerType = ContainerAppJobTriggerType.Event;
     job.Configuration.EventTriggerConfig.Scale.Rules.Add(new ContainerAppJobScaleRule
     {
         Name = "queue-rule",
         JobScaleRuleType = "azure-queue",
         Metadata = new ObjectExpression(
+            // Bicep expressions - referencing other resources dynamically
             new PropertyExpression("accountName", new IdentifierExpression(accountNameParameter.BicepIdentifier)),
             new PropertyExpression("queueName", new StringLiteralExpression("thumbnails")),
-            new PropertyExpression("queueLength", new IntLiteralExpression(1))
+            new PropertyExpression("queueLength", new IntLiteralExpression(1)) // Start job when 1+ messages
         ),
-        Identity = identityAnnotation.IdentityResource.Id.AsProvisioningParameter(infra)
+        Identity = identityAnnotation.IdentityResource.Id.AsProvisioningParameter(infra) // Use managed identity
     });
 });
 ```
 
+This approach gives you full control over Azure resource configuration without waiting for Aspire abstractions to expose every feature. The C# strongly-typed APIs generate correct Bicep/ARM templates with automatic dependency tracking and parameter passing between resources. You can seamlessly mix high-level Aspire APIs with low-level Azure Provisioning when you need fine-grained control.
+
 **Dual-Mode Worker** - Continuous in run mode, event-triggered in publish mode:
 ```csharp
-// In run mode: runs continuously for instant local feedback
+// AppHost: Set environment variable only in run mode
 if (builder.ExecutionContext.IsRunMode)
 {
     worker = worker.WithEnvironment("WORKER_RUN_CONTINUOUSLY", "true");
 }
 
-// Worker adapts behavior based on mode
-var runContinuously = _configuration.GetValue<bool>("WORKER_RUN_CONTINUOUSLY");
-if (runContinuously)
+// Worker: Adapt behavior based on mode
+if (_configuration.GetValue<bool>("WORKER_RUN_CONTINUOUSLY"))
 {
     // Local dev: poll every 5 seconds, run forever
-    await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+    await ExecuteContinuousAsync(stoppingToken);
 }
 else
 {
-    // Production: event-triggered, poll up to 2 times (5s wait) then exit if empty
-    // New job instances start automatically when messages arrive
-    if (emptyPollCount >= 2) // Exit within ~5 seconds when queue is empty
-    {
-        _logger.LogInformation("Queue empty, exiting");
-        break;
-    }
+    // Production: poll up to 2 times (5s intervals), exit when empty
+    // MaxEmptyPolls = 2, EmptyPollWaitSeconds = 5
+    await ExecuteScheduledAsync(stoppingToken);
 }
 ```
 
@@ -165,3 +189,22 @@ else
 ```csharp
 api.PublishWithContainerFiles(frontend, "wwwroot");
 ```
+
+## Performance & Cost Characteristics
+
+**Response Times:**
+- Thumbnail generation: typically ready within seconds of upload
+- Local development: instant feedback with continuous polling
+
+**Cost Optimization:**
+- **Compute**: API and worker scale to zero when idle (~5 seconds), only pay for active processing
+- **SQL**: Free tier with serverless auto-pause (GP_S_Gen5_2), free up to monthly limits
+- **Storage**: Pay only for blob storage used, queues/blobs have minimal costs at low volumes
+- **Result**: Can run entirely within Azure free tier limits
+
+**Further optimization:** Using SAS URLs instead of API blob streaming would eliminate compute/egress costs for serving images
+
+**Scalability:**
+- Parallel job instances spawn automatically for high queue depth
+- Batch processing (up to 10 messages per poll)
+- Managed identity eliminates secrets management overhead

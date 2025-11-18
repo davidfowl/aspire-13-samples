@@ -56,7 +56,7 @@ Todo app with YARP routing between Python backend and JavaScript frontend. **(Fa
 ### Azure
 
 **[image-gallery](./azure/image-gallery)** - Image gallery with event-triggered Container Apps Jobs
-Upload images to Azure Blob Storage with queue-triggered thumbnail generation. Demonstrates dual-mode resources (Azurite emulator in run mode, real Azure in publish mode), event-driven Container Apps Jobs that scale based on queue depth, and distributed processing. **(Azure Blob Storage, Azure SQL, Azure Storage Queues, Container Apps Jobs, Vite+React, event-driven scaling, queue triggers, dual-mode development)**
+Upload images with queue-triggered thumbnail generation. Event-driven Container Apps Jobs with queue-based autoscaling, managed identity authentication, and Azure SQL free tier. Demonstrates Azure.Provisioning APIs for fine-grained infrastructure control. Can run entirely within Azure free tier limits. **(Azure Blob Storage, Azure SQL free tier, Azure Storage Queues, Container Apps Jobs, Vite+React, ImageSharp, Azure.Provisioning, managed identity)**
 
 ## Learn More
 
