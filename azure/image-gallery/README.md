@@ -11,7 +11,7 @@ flowchart LR
     Vite -->|Proxy /api| API[C# API]
     API --> Azurite[Azurite Emulator<br/>Blobs + Queues]
     API --> SQL[SQL Server]
-    Worker[Background Worker] --> Azurite
+    Worker[Background Worker<br/>Polls for 2 min] --> Azurite
     Worker --> SQL
     Azurite -.Queue Message.-> Worker
 ```
@@ -23,7 +23,7 @@ flowchart LR
     API --> Blobs[Azure Blob Storage]
     API --> Queue[Azure Storage Queue]
     API --> SQL[Azure SQL]
-    Job[Container Apps Job<br/>Scale-to-zero] --> Blobs
+    Job[Container Apps Job<br/>Runs every 2 min<br/>Polls for 2 min] --> Blobs
     Job --> SQL
     Queue -.Trigger.-> Job
 ```
@@ -33,7 +33,9 @@ flowchart LR
 - **AddAzureStorage**: Blob storage and queues with automatic `.RunAsEmulator()` for local development
 - **AddAzureSqlServer**: SQL Server container in run mode, Azure SQL in publish mode with `.RunAsContainer()`
 - **PublishAsAzureContainerApp**: API scales to zero when idle, reducing costs
-- **PublishAsScheduledAzureContainerAppJob**: Worker runs on schedule to process queue messages
+- **PublishAsScheduledAzureContainerAppJob**: Worker runs every 2 minutes as a scheduled job
+- **Optimized Polling**: Worker polls queue for up to 2 minutes to catch uploads, reducing latency to 20-120 seconds
+- **Cost-Balanced Design**: Balances cost (exits when idle) with user experience (frequent polling)
 - **PublishWithContainerFiles**: Vite frontend embedded in API container
 - **WaitFor**: Ensures dependencies start in correct order
 - **OpenTelemetry**: Distributed tracing across upload → queue → worker pipeline
@@ -88,9 +90,36 @@ api.PublishAsAzureContainerApp((infra, app) =>
 });
 ```
 
-**Scheduled Container App Job** - Worker runs every 5 seconds:
+**Scheduled Container App Job** - Worker runs every 2 minutes:
 ```csharp
-worker.PublishAsScheduledAzureContainerAppJob("*/5 * * * * *");
+worker.PublishAsScheduledAzureContainerAppJob("*/2 * * * *");
+```
+
+**Polling Strategy** - Worker polls for up to 2 minutes to catch new uploads:
+```csharp
+// Worker polls queue up to 6 times, waiting 20 seconds between attempts
+private const int MaxEmptyPolls = 6;
+private const int EmptyPollWaitSeconds = 20;
+
+// Exits after 6 empty polls (saves costs) or processes all messages
+if (emptyPollCount >= MaxEmptyPolls)
+{
+    _logger.LogInformation("Queue empty after {PollCount} attempts, exiting");
+    break;
+}
+```
+
+**Graceful Shutdown** - Worker always signals application to stop via finally block:
+```csharp
+try
+{
+    // Process messages...
+}
+finally
+{
+    // Always signal shutdown, even if exceptions occurred
+    _hostApplicationLifetime.StopApplication();
+}
 ```
 
 **Container Files Publishing** - Embed Vite build output in API container:

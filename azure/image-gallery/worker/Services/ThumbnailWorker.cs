@@ -12,26 +12,51 @@ public class ThumbnailWorker(
     IServiceProvider serviceProvider,
     BlobContainerClient containerClient,
     QueueServiceClient queueService,
+    IHostApplicationLifetime hostApplicationLifetime,
     ILogger<ThumbnailWorker> logger) : BackgroundService
 {
+
     private readonly IServiceProvider _serviceProvider = serviceProvider;
     private readonly BlobContainerClient _containerClient = containerClient;
     private readonly QueueServiceClient _queueService = queueService;
+    private readonly IHostApplicationLifetime _hostApplicationLifetime = hostApplicationLifetime;
     private readonly ILogger<ThumbnailWorker> _logger = logger;
     private const int ThumbnailWidth = 300;
     private const int ThumbnailHeight = 300;
     private const long MaxImageSizeBytes = 20 * 1024 * 1024; // 20 MB - slightly larger than upload limit
     private const int MaxRetryCount = 3;
+    private const int MaxEmptyPolls = 6;        // Poll up to 6 times
+    private const int EmptyPollWaitSeconds = 20; // Wait 20 seconds between polls (total: 2 minutes)
+    private const int GracePeriodSeconds = 30;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("Thumbnail worker started");
+        var startTime = DateTime.UtcNow;
+        var processedCount = 0;
 
-        var queueClient = _queueService.GetQueueClient("thumbnails");
-        await queueClient.CreateIfNotExistsAsync(cancellationToken: stoppingToken);
-
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
+            var maxRunDuration = TimeSpan.FromMinutes(5);
+            var gracePeriod = TimeSpan.FromSeconds(GracePeriodSeconds);
+
+            _logger.LogInformation("Thumbnail worker started, will run for max {Duration} minutes", maxRunDuration.TotalMinutes);
+
+            var queueClient = _queueService.GetQueueClient("thumbnails");
+            await queueClient.CreateIfNotExistsAsync(cancellationToken: stoppingToken);
+
+            var emptyPollCount = 0;
+
+            while (!stoppingToken.IsCancellationRequested)
+        {
+            // Check if we've exceeded max run duration
+            var elapsed = DateTime.UtcNow - startTime;
+            if (elapsed >= maxRunDuration)
+            {
+                _logger.LogInformation("Max run duration reached ({Duration} minutes), exiting. Processed {Count} messages",
+                    maxRunDuration.TotalMinutes, processedCount);
+                break;
+            }
+
             try
             {
                 // Receive messages from queue
@@ -42,16 +67,44 @@ public class ThumbnailWorker(
 
                 if (messages.Length == 0)
                 {
-                    // No messages, wait before polling again
-                    await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+                    emptyPollCount++;
+
+                    if (emptyPollCount >= MaxEmptyPolls)
+                    {
+                        // No messages after multiple attempts, exit to save costs
+                        _logger.LogInformation("Queue empty after {PollCount} attempts, exiting. Processed {Count} messages in {Elapsed}",
+                            emptyPollCount, processedCount, elapsed);
+                        break;
+                    }
+
+                    // Wait briefly in case new messages arrive
+                    _logger.LogInformation("Queue empty, waiting {WaitSeconds}s before retry ({PollCount}/{MaxPolls})",
+                        EmptyPollWaitSeconds, emptyPollCount, MaxEmptyPolls);
+                    await Task.Delay(TimeSpan.FromSeconds(EmptyPollWaitSeconds), stoppingToken);
                     continue;
                 }
 
+                // Reset empty counter when work is found
+                emptyPollCount = 0;
+                _logger.LogInformation("Found {Count} messages to process", messages.Length);
+
                 foreach (var message in messages)
                 {
+                    // Check if we have enough time to process another message
+                    var currentElapsed = DateTime.UtcNow - startTime;
+                    var estimatedTimeRemaining = maxRunDuration - currentElapsed;
+
+                    if (estimatedTimeRemaining < gracePeriod)
+                    {
+                        _logger.LogInformation("Approaching timeout ({RemainingSeconds}s left), finishing current batch gracefully",
+                            estimatedTimeRemaining.TotalSeconds);
+                        break;
+                    }
+
                     try
                     {
                         await ProcessMessageAsync(message, queueClient, stoppingToken);
+                        processedCount++;
                     }
                     catch (Exception ex)
                     {
@@ -76,11 +129,20 @@ public class ThumbnailWorker(
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in thumbnail worker main loop");
-                await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
+                // Don't retry on error, just exit to let the next scheduled run handle it
+                break;
             }
         }
 
-        _logger.LogInformation("Thumbnail worker stopped");
+            _logger.LogInformation("Thumbnail worker stopped. Total processed: {Count}, Duration: {Elapsed}",
+                processedCount, DateTime.UtcNow - startTime);
+        }
+        finally
+        {
+            // Always signal application shutdown, even if exceptions occurred
+            _logger.LogInformation("Shutting down worker application");
+            _hostApplicationLifetime.StopApplication();
+        }
     }
 
     private async Task ProcessMessageAsync(
