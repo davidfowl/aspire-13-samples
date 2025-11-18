@@ -57,14 +57,21 @@ flowchart LR
 - **Polyglot Stack**: Vite+React frontend embedded in C# API container, ImageSharp for image processing
 - **OpenTelemetry**: Distributed tracing across upload → queue → worker pipeline
 
-## Running
+## Running Locally
 
 ```bash
 aspire run
 ```
 
-## Commands
+No Azure resources required - uses Azurite emulator and SQL Server container.
 
+## Deploying to Azure
+
+**Prerequisites for deployment:**
+- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli)
+- [Azure subscription](https://azure.microsoft.com/free/)
+
+**Commands:**
 ```bash
 aspire run      # Run locally with Azurite
 aspire publish  # Generate Bicep files to explore deployment artifacts (output in ./aspire-output)

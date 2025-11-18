@@ -56,7 +56,7 @@ Todo app with YARP routing between Python backend and JavaScript frontend. **(Fa
 ### Azure
 
 **[image-gallery](./azure/image-gallery)** - Image gallery with event-triggered Container Apps Jobs
-Upload images with queue-triggered thumbnail generation. Event-driven Container Apps Jobs with queue-based autoscaling, managed identity authentication, and Azure SQL free tier. Demonstrates Azure.Provisioning APIs for fine-grained infrastructure control. Can run entirely within Azure free tier limits. **(Azure Blob Storage, Azure SQL free tier, Azure Storage Queues, Container Apps Jobs, Vite+React, ImageSharp, Azure.Provisioning, managed identity)**
+Upload images with queue-triggered thumbnail generation. Event-driven Container Apps Jobs with queue-based autoscaling, managed identity authentication, and Azure SQL free tier. Demonstrates Azure.Provisioning APIs for fine-grained infrastructure control. Runs locally with Azurite emulator - **no Azure subscription required for local development**. Can deploy entirely within Azure free tier limits. **(Azure Blob Storage, Azure SQL free tier, Azure Storage Queues, Container Apps Jobs, Vite+React, ImageSharp, Azure.Provisioning, managed identity)**
 
 ## Learn More
 
