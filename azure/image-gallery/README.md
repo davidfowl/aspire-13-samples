@@ -11,7 +11,7 @@ flowchart LR
     Vite -->|Proxy /api| API[C# API]
     API --> Azurite[Azurite Emulator<br/>Blobs + Queues]
     API --> SQL[SQL Server]
-    Worker[Background Worker<br/>Polls for 2 min] --> Azurite
+    Worker[Background Worker<br/>Runs continuously] --> Azurite
     Worker --> SQL
     Azurite -.Queue Message.-> Worker
 ```
@@ -34,8 +34,8 @@ flowchart LR
 - **AddAzureSqlServer**: SQL Server container in run mode, Azure SQL in publish mode with `.RunAsContainer()`
 - **PublishAsAzureContainerApp**: API scales to zero when idle, reducing costs
 - **PublishAsScheduledAzureContainerAppJob**: Worker runs every 2 minutes as a scheduled job
-- **Optimized Polling**: Worker polls queue for up to 2 minutes to catch uploads, reducing latency to 20-120 seconds
-- **Cost-Balanced Design**: Balances cost (exits when idle) with user experience (frequent polling)
+- **Dual-Mode Worker**: Continuous polling (5s) in run mode for instant feedback, scheduled execution (2 min) in publish mode for cost efficiency
+- **Cost-Balanced Design**: Balances cost (exits when idle) with user experience (frequent polling in production, instant in dev)
 - **PublishWithContainerFiles**: Vite frontend embedded in API container
 - **WaitFor**: Ensures dependencies start in correct order
 - **OpenTelemetry**: Distributed tracing across upload → queue → worker pipeline
@@ -94,30 +94,51 @@ api.PublishAsAzureContainerApp((infra, app) =>
 worker.PublishAsScheduledAzureContainerAppJob("*/2 * * * *");
 ```
 
-**Polling Strategy** - Worker polls for up to 2 minutes to catch new uploads:
+**Dual-Mode Worker** - Continuous in run mode, scheduled in publish mode:
 ```csharp
-// Worker polls queue up to 6 times, waiting 20 seconds between attempts
-private const int MaxEmptyPolls = 6;
-private const int EmptyPollWaitSeconds = 20;
-
-// Exits after 6 empty polls (saves costs) or processes all messages
-if (emptyPollCount >= MaxEmptyPolls)
+// In run mode: runs continuously for instant local feedback
+if (builder.ExecutionContext.IsRunMode)
 {
-    _logger.LogInformation("Queue empty after {PollCount} attempts, exiting");
-    break;
+    worker = worker.WithEnvironment("WORKER_RUN_CONTINUOUSLY", "true");
+}
+
+// Worker adapts behavior based on mode
+var runContinuously = _configuration.GetValue<bool>("WORKER_RUN_CONTINUOUSLY");
+if (runContinuously)
+{
+    // Local dev: poll every 5 seconds, run forever
+    await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+}
+else
+{
+    // Production: poll up to 6 times (2 minutes), then exit to save costs
+    if (emptyPollCount >= MaxEmptyPolls)
+    {
+        _logger.LogInformation("Queue empty, exiting");
+        break;
+    }
 }
 ```
 
-**Graceful Shutdown** - Worker always signals application to stop via finally block:
+**Graceful Shutdown** - Scheduled mode always stops, exceptions crash naturally:
 ```csharp
-try
+if (_configuration.GetValue<bool>("WORKER_RUN_CONTINUOUSLY"))
 {
-    // Process messages...
+    // Continuous mode: run forever, let exceptions crash the app
+    await ExecuteContinuousAsync(stoppingToken);
 }
-finally
+else
 {
-    // Always signal shutdown, even if exceptions occurred
-    _hostApplicationLifetime.StopApplication();
+    try
+    {
+        // Scheduled mode: always shutdown after completion
+        await ExecuteScheduledAsync(stoppingToken);
+    }
+    finally
+    {
+        // Always stop application in scheduled mode (success or exception)
+        _hostApplicationLifetime.StopApplication();
+    }
 }
 ```
 

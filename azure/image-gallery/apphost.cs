@@ -58,8 +58,17 @@ var worker = builder.AddCSharpApp("worker", "./worker")
     .WithReference(queues)
     .WithReference(sql)
     .WaitFor(sql)
-    .WaitFor(queues)
-    .PublishAsScheduledAzureContainerAppJob("*/2 * * * *");
+    .WaitFor(queues);
+
+if (builder.ExecutionContext.IsRunMode)
+{
+    // In run mode, keep worker running continuously for fast local development
+    worker = worker.WithEnvironment("WORKER_RUN_CONTINUOUSLY", "true");
+}
+else
+{
+    worker.PublishAsScheduledAzureContainerAppJob("*/2 * * * *");
+}
 
 // Frontend: Vite+React for upload and gallery UI
 var frontend = builder.AddViteApp("frontend", "./frontend")
