@@ -32,7 +32,7 @@ builder.Services.AddAuthentication(options =>
         options =>
         {
             options.ClientId = "bff-client";
-            options.ClientSecret = "bff-client-secret";
+            options.ClientSecret = builder.Configuration["BFF_CLIENT_SECRET"] ?? throw new InvalidOperationException("BFF_CLIENT_SECRET is not configured.");
             options.ResponseType = "code";
             options.SaveTokens = true;
             options.GetClaimsFromUserInfoEndpoint = true;

@@ -7,16 +7,26 @@ var builder = DistributedApplication.CreateBuilder(args);
 
 builder.AddDockerComposeEnvironment("dc");
 
+// Client secret for OAuth/OIDC
+var generatedPassword = new GenerateParameterDefault
+{
+    MinLength = 22, // enough to give 128 bits of entropy when using the default 67 possible characters. See remarks in GenerateParameterDefault
+};
+
+var bffClientSecret = builder.AddParameter("bff-client-secret", generatedPassword, secret: true);
+
 // Keycloak Identity Provider
 var keycloak = builder.AddKeycloak("keycloak")
                       // .WithDataVolume() // Persist Keycloak data between runs
                       .WithRealmImport("./Realms") // Import realm configuration
+                      .WithEnvironment("BFF_CLIENT_SECRET", bffClientSecret)
                       .WithUrl("", "Keycloak Admin");
 
 // BFF (Backend for Frontend) - serves frontend and handles auth
 var bff = builder.AddCSharpApp("bff", "./bff")
                  .WithHttpHealthCheck("/health")
                  .WithExternalHttpEndpoints()
+                 .WithEnvironment("BFF_CLIENT_SECRET", bffClientSecret)
                  .WaitFor(keycloak)
                  .WithReference(keycloak)
                  .WithUrls(context =>

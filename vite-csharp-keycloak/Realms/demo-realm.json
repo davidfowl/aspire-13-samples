@@ -29,7 +29,7 @@
         "${BFF_URL}"
       ],
       "clientAuthenticatorType": "client-secret",
-      "secret": "bff-client-secret"
+      "secret": "${BFF_CLIENT_SECRET}"
     }
   ],
   "users": [
