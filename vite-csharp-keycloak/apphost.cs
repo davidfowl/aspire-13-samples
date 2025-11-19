@@ -49,7 +49,7 @@ else
 {
     // When in publish mode, configure BFF_URL to point at the BFF HTTPS endpoint
     // since the frontend is served from there
-    keycloak.WithEnvironment("BFF_URL", bff.GetEndpoint("https"));
+    keycloak.WithEnvironment("BFF_URL", bff.GetEndpoint("http"));
 }
 
 // Publish: Embed frontend build output in BFF container
