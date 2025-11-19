@@ -14,7 +14,7 @@ sequenceDiagram
     actor User
     participant Browser
     participant Vite as Vite Dev Server<br/>(localhost:9082)
-    participant BFF as BFF (C#)<br/>(localhost:5254)
+    participant BFF as BFF<br/>(localhost:5254)
     participant Keycloak as Keycloak IDP<br/>(localhost:8080)
 
     User->>Browser: Click login button
@@ -38,7 +38,7 @@ sequenceDiagram
     actor User
     participant Browser
     participant Vite as Vite Dev Server<br/>(localhost:9082)
-    participant BFF as BFF (C#)<br/>(localhost:5254)
+    participant BFF as BFF<br/>(localhost:5254)
     participant Keycloak as Keycloak IDP<br/>(localhost:8080)
 
     User->>Browser: Click logout button
@@ -53,7 +53,20 @@ sequenceDiagram
     Browser->>Vite: Navigate to home page
 ```
 
-> **Note**: In publish mode, the BFF serves the built frontend from `wwwroot` and Keycloak redirects go directly to the BFF instead of being proxied through Vite.
+## Publish Mode Differences
+
+In publish mode, the architecture is simplified because there's no Vite dev server:
+
+- **Single Endpoint**: The BFF serves the built frontend from `wwwroot` (no separate Vite server)
+- **Direct Redirects**: Keycloak OAuth redirects go directly to the BFF (no Vite proxy)
+- **BFF_URL Configuration**: The `BFF_URL` environment variable points to the BFF's HTTPS endpoint instead of the Vite dev server URL
+- **Container Files**: The Vite build output (`npm run build`) is embedded in the BFF container using `PublishWithContainerFiles()`
+
+The AppHost automatically configures the correct `BFF_URL` based on execution context:
+- **Run Mode**: `BFF_URL = http://localhost:9082` (Vite frontend URL)
+- **Publish Mode**: `BFF_URL = https://bff-url` (BFF HTTPS endpoint)
+
+This means the same Keycloak realm configuration works in both modes thanks to the `${BFF_URL}` environment variable substitution.
 
 ## How It Works
 
