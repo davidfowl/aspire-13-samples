@@ -51,6 +51,9 @@ var frontend = builder.AddViteApp("frontend", "./frontend")
 if (builder.ExecutionContext.IsRunMode)
 {
     keycloak.WithEnvironment("BFF_URL", frontend.GetEndpoint("http", KnownNetworkIdentifiers.LocalhostNetwork));
+
+    // Enable forwarded headers middleware for Vite proxy in development
+    bff.WithEnvironment("ASPNETCORE_FORWARDEDHEADERS_ENABLED", "true");
 }
 else
 {

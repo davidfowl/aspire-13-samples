@@ -12,17 +12,6 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
-// Configure forwarded headers to handle proxy (development only)
-if (builder.Environment.IsDevelopment())
-{
-    builder.Services.Configure<ForwardedHeadersOptions>(options =>
-    {
-        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
-        options.KnownIPNetworks.Clear();
-        options.KnownProxies.Clear();
-    });
-}
-
 // Add OpenAPI support
 builder.Services.AddOpenApi();
 
@@ -54,12 +43,18 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization();
 
-var app = builder.Build();
-
-if (app.Environment.IsDevelopment())
+if (builder.Environment.IsDevelopment())
 {
-    app.UseForwardedHeaders();
+    // Enable forwarded headers middleware for Vite proxy in development
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    {
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
+        options.KnownIPNetworks.Clear();
+        options.KnownProxies.Clear();
+    });
 }
+
+var app = builder.Build();
 
 app.UseFileServer();
 

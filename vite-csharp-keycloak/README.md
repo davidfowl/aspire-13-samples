@@ -88,7 +88,7 @@ In publish mode, Keycloak is configured with `BFF_URL=https://bff-url` (BFF HTTP
 **BFF Configuration:**
 - ✅ **PKCE Enabled**: Proof Key for Code Exchange provides protection against authorization code interception
 - ✅ **POST for Logout**: Prevents CSRF attacks on logout endpoint
-- ✅ **Forwarded Headers (Dev Only)**: Only enabled in development mode, not in production
+- ✅ **Forwarded Headers (Dev Only)**: Enabled via `ASPNETCORE_FORWARDEDHEADERS_ENABLED` in development mode only
 - ❌ **RequireHttpsMetadata = false**: Disables HTTPS validation for Keycloak metadata endpoints - allows HTTP in development but vulnerable to MITM attacks
 - ❌ **No Cookie Security Settings**: Missing SameSite, Secure flags for production
 - ❌ **Open Redirect**: Login endpoint accepts unvalidated `returnUrl` parameter
