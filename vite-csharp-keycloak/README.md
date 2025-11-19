@@ -4,47 +4,56 @@
 
 BFF (Backend for Frontend) pattern demonstrating cookie-based authentication with Keycloak as the identity provider. Single C# project serving Vite frontend with protected and public pages.
 
-## Architecture
+## Architecture (Run Mode)
 
-### Run Mode Architecture
+In run mode, the Vite dev server (port 9082) serves the frontend with HMR enabled, while the BFF (port 5254) handles authentication and API requests. Keycloak redirects are configured to go to the Vite URL first, which then proxies them to the BFF.
+
+### Login & Authentication Flow
 ```mermaid
-flowchart TB
-    Browser[Browser]
-    Vite[Vite Dev Server<br/>localhost:9082<br/>HMR enabled]
-    BFF[C# BFF<br/>localhost:5254<br/>Cookie Auth + PKCE]
-    Keycloak[Keycloak IDP<br/>localhost:8080<br/>demo realm]
+sequenceDiagram
+    actor User
+    participant Browser
+    participant Vite as Vite Dev Server<br/>(localhost:9082)
+    participant BFF as C# BFF<br/>(localhost:5254)
+    participant Keycloak as Keycloak IDP<br/>(localhost:8080)
 
-    Browser -->|1. Navigate to app| Vite
-    Vite -->|2. Proxy /api requests| BFF
-    Browser -->|3. Click login| Vite
-    Vite -->|4. Proxy /api/auth/login| BFF
-    BFF -->|5. Redirect to Keycloak| Browser
-    Browser -->|6. Login page| Keycloak
-    Keycloak -->|7. Redirect after auth<br/>to BFF_URL=/api/auth/signin-oidc| Vite
-    Vite -->|8. Proxy callback| BFF
-    BFF -->|9. Set cookie, redirect| Browser
-    Browser -->|10. Access protected pages| Vite
+    User->>Browser: Click login button
+    Browser->>Vite: GET /api/auth/login
+    Vite->>BFF: Proxy request
+    BFF->>Browser: 302 Redirect to Keycloak
+    Browser->>Keycloak: GET /auth (login page)
+    User->>Keycloak: Enter demo/demo
+    Keycloak->>Browser: 302 Redirect to<br/>http://localhost:9082/api/auth/signin-oidc
+    Browser->>Vite: GET /api/auth/signin-oidc?code=...
+    Vite->>BFF: Proxy callback
+    BFF->>Keycloak: Exchange code for tokens (PKCE)
+    Keycloak->>BFF: Return tokens
+    BFF->>Browser: Set HTTP-only cookie<br/>302 Redirect to /
+    Browser->>Vite: Navigate to protected page
 ```
 
-In run mode, Keycloak is configured with `BFF_URL=http://localhost:9082` (Vite frontend URL). All OAuth redirects go to Vite first, which then proxies the callback to the BFF.
-
-### Publish Mode Architecture
+### Logout Flow
 ```mermaid
-flowchart TB
-    Browser[Browser]
-    BFF[C# BFF<br/>Serving Vite build<br/>from wwwroot<br/>Cookie Auth + PKCE]
-    Keycloak[Keycloak IDP<br/>demo realm]
+sequenceDiagram
+    actor User
+    participant Browser
+    participant Vite as Vite Dev Server<br/>(localhost:9082)
+    participant BFF as C# BFF<br/>(localhost:5254)
+    participant Keycloak as Keycloak IDP<br/>(localhost:8080)
 
-    Browser -->|1. Navigate to app| BFF
-    Browser -->|2. Click login| BFF
-    BFF -->|3. Redirect to Keycloak| Browser
-    Browser -->|4. Login page| Keycloak
-    Keycloak -->|5. Redirect after auth<br/>to BFF_URL=/api/auth/signin-oidc| BFF
-    BFF -->|6. Set cookie, redirect| Browser
-    Browser -->|7. Access protected pages| BFF
+    User->>Browser: Click logout button
+    Browser->>Vite: POST /api/auth/logout
+    Vite->>BFF: Proxy request
+    BFF->>Browser: 302 Redirect to Keycloak<br/>end_session_endpoint
+    Browser->>Keycloak: GET /logout
+    Keycloak->>Browser: 302 Redirect to<br/>http://localhost:9082/api/auth/signout-callback-oidc
+    Browser->>Vite: GET /api/auth/signout-callback-oidc
+    Vite->>BFF: Proxy callback
+    BFF->>Browser: 302 Redirect to / (clean URL)
+    Browser->>Vite: Navigate to home page
 ```
 
-In publish mode, Keycloak is configured with `BFF_URL=https://bff-url` (BFF HTTPS endpoint). OAuth redirects go directly to the BFF since it's serving the frontend.
+> **Note**: In publish mode, the BFF serves the built frontend from `wwwroot` and Keycloak redirects go directly to the BFF instead of being proxied through Vite.
 
 ## How It Works
 
