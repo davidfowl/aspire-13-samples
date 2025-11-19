@@ -10,9 +10,6 @@ Small, focused samples demonstrating .NET Aspire 13's polyglot platform support 
 
 ### AI & Machine Learning
 
-**[openai-chat-htmx](./openai-chat-htmx)** - OpenAI chat with HTMX
-GPT-powered chat application with streaming responses. Uses HTMX for dynamic UI updates (no build step required), Redis for conversation history. **(OpenAI, HTMX, Redis, C#, server-side rendering)**
-
 **[rag-document-qa-svelte](./rag-document-qa-svelte)** - RAG document Q&A with Svelte
 Upload documents and ask questions using retrieval augmented generation. Vector search with Qdrant, OpenAI embeddings. **(OpenAI, Qdrant, Svelte, Python, vector database, RAG pattern)**
 
