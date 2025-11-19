@@ -38,7 +38,7 @@ Single-file AppHost demonstrating static file serving. **(YARP reverse proxy, Vi
 Todo app demonstrating modern .NET patterns. **(EF Core 10, PostgreSQL, pgAdmin, Scalar API docs, Vite+React, OpenTelemetry, container file publishing)**
 
 **[vite-csharp-keycloak](./vite-csharp-keycloak)** - BFF with Keycloak authentication
-BFF (Backend for Frontend) pattern with cookie-based OIDC authentication. Single C# project serving Vite frontend with protected and public pages. **(Keycloak, OIDC, cookie-based auth, BFF pattern, realm import, Vite+React, ASP.NET Core authentication)**
+BFF (Backend for Frontend) pattern with cookie-based OIDC authentication. Demonstrates auto-generated client secrets, realm configuration with environment variable substitution, and dual-mode redirect URLs (Vite dev server in run mode, BFF in publish mode). **(Keycloak, OIDC, PKCE, auto-generated secrets, realm import with variables, Aspire.Keycloak.Authentication, Vite+React, parameter generation)**
 
 ### Go
 

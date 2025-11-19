@@ -4,49 +4,77 @@ BFF (Backend for Frontend) pattern demonstrating cookie-based authentication wit
 
 ## Architecture
 
-**Run Mode:**
+### Run Mode Architecture
 ```mermaid
-flowchart LR
-    Browser --> Vite[Vite Dev Server<br/>HMR enabled]
-    Vite -->|Proxy /api| BFF[C# BFF<br/>Cookie Auth]
-    BFF --> Keycloak[Keycloak IDP<br/>demo-realm]
-    Keycloak -->|OIDC Flow| BFF
+flowchart TB
+    Browser[Browser]
+    Vite[Vite Dev Server<br/>localhost:9082<br/>HMR enabled]
+    BFF[C# BFF<br/>localhost:5254<br/>Cookie Auth + PKCE]
+    Keycloak[Keycloak IDP<br/>localhost:8080<br/>demo realm]
+
+    Browser -->|1. Navigate to app| Vite
+    Vite -->|2. Proxy /api requests| BFF
+    Browser -->|3. Click login| Vite
+    Vite -->|4. Proxy /api/auth/login| BFF
+    BFF -->|5. Redirect to Keycloak| Browser
+    Browser -->|6. Login page| Keycloak
+    Keycloak -->|7. Redirect after auth<br/>to BFF_URL=/api/auth/signin-oidc| Vite
+    Vite -->|8. Proxy callback| BFF
+    BFF -->|9. Set cookie, redirect| Browser
+    Browser -->|10. Access protected pages| Vite
 ```
 
-**Publish Mode:**
+In run mode, Keycloak is configured with `BFF_URL=http://localhost:9082` (Vite frontend URL). All OAuth redirects go to Vite first, which then proxies the callback to the BFF.
+
+### Publish Mode Architecture
 ```mermaid
-flowchart LR
-    Browser --> BFF[C# BFF serving<br/>Vite build output<br/>'npm run build']
-    BFF --> Keycloak[Keycloak IDP<br/>demo-realm]
-    Keycloak -->|OIDC Flow| BFF
+flowchart TB
+    Browser[Browser]
+    BFF[C# BFF<br/>Serving Vite build<br/>from wwwroot<br/>Cookie Auth + PKCE]
+    Keycloak[Keycloak IDP<br/>demo realm]
+
+    Browser -->|1. Navigate to app| BFF
+    Browser -->|2. Click login| BFF
+    BFF -->|3. Redirect to Keycloak| Browser
+    Browser -->|4. Login page| Keycloak
+    Keycloak -->|5. Redirect after auth<br/>to BFF_URL=/api/auth/signin-oidc| BFF
+    BFF -->|6. Set cookie, redirect| Browser
+    Browser -->|7. Access protected pages| BFF
 ```
+
+In publish mode, Keycloak is configured with `BFF_URL=https://bff-url` (BFF HTTPS endpoint). OAuth redirects go directly to the BFF since it's serving the frontend.
 
 ## How It Works
 
 ### BFF Authentication Flow
 
 1. **Login**: User clicks login → BFF challenges with OIDC
-2. **Keycloak**: Redirects to Keycloak login page (demo-realm)
-3. **Callback**: After authentication, Keycloak redirects back to BFF
+2. **Keycloak**: Redirects to Keycloak login page (demo realm)
+3. **Callback**: After authentication, Keycloak redirects to `/api/auth/signin-oidc`
 4. **Cookie**: BFF issues secure HTTP-only cookie for session
 5. **Protected Routes**: Frontend checks auth state, calls protected API endpoints
 
 ### Security Model
 
-- No tokens exposed to frontend JavaScript
-- Cookie-based session management (HTTP-only, secure)
-- OIDC authorization code flow (not implicit)
-- Protected API endpoints require authentication
+- **PKCE**: Proof Key for Code Exchange enabled for enhanced security
+- **No tokens in frontend**: Tokens never exposed to frontend JavaScript
+- **Cookie-based sessions**: HTTP-only, secure cookies for session management
+- **Authorization code flow**: Standard OIDC flow (not implicit)
+- **Forwarded headers**: Proxy support for X-Forwarded-* headers
+- **Generated secrets**: Client secret auto-generated with 128 bits of entropy
 - Demo credentials: `demo` / `demo`
 
 ## What This Demonstrates
 
 - **BFF Pattern**: Single C# backend serving frontend and handling auth
 - **Keycloak Integration**: OIDC authentication with Aspire.Keycloak.Authentication package
-- **Realm Import**: Automatic Keycloak realm configuration on startup
+- **Realm Import with Variables**: Automatic realm configuration using environment variable substitution
+- **Parameter Generation**: Auto-generated client secrets with configurable entropy
+- **PKCE Support**: Enhanced OAuth security with Proof Key for Code Exchange
 - **Cookie-based Auth**: Secure session management without exposing tokens
 - **Protected Routes**: React Router with authentication checks
 - **Service Discovery**: Automatic Keycloak URL resolution via Aspire
+- **Dual-Mode URLs**: Different redirect URLs for run mode (Vite) vs publish mode (BFF)
 - **Container Files**: Vite build output embedded in BFF container
 
 ## Running Locally
@@ -63,13 +91,14 @@ Access the app and login with:
 
 ```
 vite-csharp-keycloak/
-├── apphost.cs                 # Aspire orchestration
+├── apphost.cs                 # Aspire orchestration with parameter generation
 ├── Realms/
-│   └── demo-realm.json        # Keycloak realm configuration
+│   └── demo-realm.json        # Keycloak realm with ${BFF_URL} and ${BFF_CLIENT_SECRET}
 ├── bff/
-│   ├── Program.cs             # BFF with OIDC + cookie auth
+│   ├── Program.cs             # BFF with OIDC + cookie auth + PKCE
+│   ├── Extensions.cs          # Service defaults (health checks, OpenTelemetry)
 │   ├── Extensions/
-│   │   ├── AuthEndpoints.cs   # Login, logout, user info
+│   │   ├── AuthEndpoints.cs   # Login, logout, user info with Keycloak claims
 │   │   └── DataEndpoints.cs   # Protected data endpoints
 ├── frontend/
 │   ├── src/
@@ -84,54 +113,47 @@ vite-csharp-keycloak/
 
 ## Key Aspire Patterns
 
-**Keycloak with Realm Import** - Automatic realm configuration on startup:
-```csharp
-var keycloak = builder.AddKeycloak("keycloak")
-                      .WithDataVolume()        // Persist data between runs
-                      .WithRealmImport("./Realms"); // Import demo-realm.json
-```
+### Auto-Generated Client Secrets
+The BFF client secret is automatically generated with 128 bits of entropy using `GenerateParameterDefault`. The secret is stored securely and passed to both Keycloak and the BFF via environment variables, eliminating the need to hardcode credentials.
 
-**Keycloak Authentication** - OIDC configuration with Aspire integration:
-```csharp
-builder.Services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
-    .AddKeycloakOpenIdConnect(
-        "keycloak",
-        realm: "demo-realm",
-        options =>
-        {
-            options.ClientId = "bff-client";
-            options.ClientSecret = "bff-client-secret";
-            options.ResponseType = "code";
-        });
-```
+### Realm Configuration with Variable Substitution
+The Keycloak realm configuration (`Realms/demo-realm.json`) uses environment variable placeholders:
+- `${BFF_CLIENT_SECRET}` - Auto-generated OAuth client secret
+- `${BFF_URL}` - Dynamic redirect URL (differs in run vs publish mode)
 
-Uses `Aspire.Keycloak.Authentication` package to automatically configure OpenID Connect with the Keycloak realm using Aspire service discovery.
+These variables are replaced at runtime when Keycloak imports the realm, enabling a single realm definition that works across environments.
 
-**Container Files Publishing** - Embed Vite build output in BFF container:
-```csharp
-bff.PublishWithContainerFiles(frontend, "wwwroot");
-```
+### Dual-Mode Redirect URLs
+**Run Mode:** Keycloak redirects OAuth callbacks to the Vite dev server (`http://localhost:9082`), which proxies them to the BFF. This preserves HMR and the development experience.
 
-In run mode, Vite dev server runs with HMR. In publish mode, `npm run build` output is copied to BFF's wwwroot.
+**Publish Mode:** Keycloak redirects OAuth callbacks directly to the BFF HTTPS endpoint, since the BFF serves the built frontend from `wwwroot`.
 
-**Service References** - Frontend proxies API calls to BFF:
-```csharp
-var frontend = builder.AddViteApp("frontend", "./frontend")
-                      .WithReference(bff);
-```
+The AppHost automatically configures `BFF_URL` based on execution context (`IsRunMode`).
 
-Enables Vite dev server to proxy `/api` requests to the BFF.
+### Keycloak Authentication with PKCE
+Uses `Aspire.Keycloak.Authentication` package with:
+- Cookie + OpenID Connect authentication schemes
+- PKCE (Proof Key for Code Exchange) for enhanced security
+- Automatic service discovery to resolve Keycloak URLs
+- Custom callback path: `/api/auth/signin-oidc`
+- Client secret from configuration (not hardcoded)
+
+### Container Files Publishing
+In publish mode, Vite build output (`npm run build`) is embedded in the BFF container at `wwwroot`, creating a single deployable artifact.
 
 ## Authentication Endpoints
 
 **Login** - `GET /api/auth/login?returnUrl=/protected`
 Initiates OIDC flow, redirects to Keycloak
 
-**Logout** - `POST /api/auth/logout`
-Clears session cookie, signs out from Keycloak
+**Logout** - `GET /api/auth/logout`
+Signs out of local cookie session and Keycloak (full logout with redirect to Keycloak's end_session_endpoint)
+
+**Callback** - `GET /api/auth/signin-oidc`
+OAuth callback endpoint where Keycloak redirects after authentication (handled by OIDC middleware)
 
 **User Info** - `GET /api/auth/user`
-Returns current user info (username, email, claims)
+Returns current user info with Keycloak standard claims (preferred_username, email, given_name, family_name)
 
 **Protected Data** - `GET /api/data/profile` (requires auth)
 Example protected endpoint demonstrating authorization

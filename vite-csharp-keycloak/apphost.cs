@@ -1,11 +1,8 @@
 #:sdk Aspire.AppHost.Sdk@13.0.0
 #:package Aspire.Hosting.Keycloak@13-*
-#:package Aspire.Hosting.Docker@13-*
 #:package Aspire.Hosting.JavaScript@13.0.0
 
 var builder = DistributedApplication.CreateBuilder(args);
-
-builder.AddDockerComposeEnvironment("dc");
 
 // Client secret for OAuth/OIDC
 var generatedPassword = new GenerateParameterDefault
