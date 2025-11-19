@@ -37,6 +37,9 @@ Single-file AppHost demonstrating static file serving. **(YARP reverse proxy, Vi
 **[vite-csharp-postgres](./vite-csharp-postgres)** - ASP.NET Core Minimal API + PostgreSQL + Vite
 Todo app demonstrating modern .NET patterns. **(EF Core 10, PostgreSQL, pgAdmin, Scalar API docs, Vite+React, OpenTelemetry, container file publishing)**
 
+**[vite-csharp-keycloak](./vite-csharp-keycloak)** - BFF with Keycloak authentication
+BFF (Backend for Frontend) pattern with cookie-based OIDC authentication. Single C# project serving Vite frontend with protected and public pages. **(Keycloak, OIDC, cookie-based auth, BFF pattern, realm import, Vite+React, ASP.NET Core authentication)**
+
 ### Go
 
 **[golang-api](./golang-api)** - Go API with in-memory storage
