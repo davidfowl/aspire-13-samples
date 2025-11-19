@@ -14,7 +14,7 @@ sequenceDiagram
     actor User
     participant Browser
     participant Vite as Vite Dev Server<br/>(localhost:9082)
-    participant BFF as C# BFF<br/>(localhost:5254)
+    participant BFF as BFF (C#)<br/>(localhost:5254)
     participant Keycloak as Keycloak IDP<br/>(localhost:8080)
 
     User->>Browser: Click login button
@@ -38,7 +38,7 @@ sequenceDiagram
     actor User
     participant Browser
     participant Vite as Vite Dev Server<br/>(localhost:9082)
-    participant BFF as C# BFF<br/>(localhost:5254)
+    participant BFF as BFF (C#)<br/>(localhost:5254)
     participant Keycloak as Keycloak IDP<br/>(localhost:8080)
 
     User->>Browser: Click logout button
