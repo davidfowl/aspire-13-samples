@@ -47,8 +47,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const logout = () => {
-    // Navigate to logout endpoint which will redirect through Keycloak and back
-    window.location.href = '/api/auth/logout'
+    // For OIDC logout, we need the browser to follow redirects to Keycloak and back
+    // Using a form POST allows the browser to naturally handle the redirect chain
+    const form = document.createElement('form')
+    form.method = 'POST'
+    form.action = '/api/auth/logout'
+    document.body.appendChild(form)
+    form.submit()
   }
 
   return (

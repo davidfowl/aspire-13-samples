@@ -22,7 +22,7 @@
       "serviceAccountsEnabled": false,
       "redirectUris": [
         "${BFF_URL}/api/auth/signin-oidc",
-        "${BFF_URL}/signout-callback-oidc",
+        "${BFF_URL}/api/auth/signout-callback-oidc",
         "${BFF_URL}/"
       ],
       "webOrigins": [

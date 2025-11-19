@@ -4,17 +4,24 @@ using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.HttpOverrides;
 using Scalar.AspNetCore;
 
+// ⚠️ WARNING: This sample is for DEVELOPMENT ONLY
+// Many security configurations here are not suitable for production.
+// See README.md Security Notes section for details on production hardening.
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
-// Configure forwarded headers to handle proxy
-builder.Services.Configure<ForwardedHeadersOptions>(options =>
+// Configure forwarded headers to handle proxy (development only)
+if (builder.Environment.IsDevelopment())
 {
-    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
-    options.KnownIPNetworks.Clear();
-    options.KnownProxies.Clear();
-});
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    {
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
+        options.KnownIPNetworks.Clear();
+        options.KnownProxies.Clear();
+    });
+}
 
 // Add OpenAPI support
 builder.Services.AddOpenApi();
@@ -36,18 +43,23 @@ builder.Services.AddAuthentication(options =>
             options.ResponseType = "code";
             options.SaveTokens = true;
             options.GetClaimsFromUserInfoEndpoint = true;
-            options.RequireHttpsMetadata = false; // For local development only
+            // ⚠️ WARNING: RequireHttpsMetadata = false allows HTTP for development but is vulnerable to MITM attacks
+            // For production: Set to true and ensure Keycloak is only accessible via HTTPS
+            options.RequireHttpsMetadata = false;
             options.MapInboundClaims = false; // Use standard OIDC claim names
             options.UsePkce = true;
             options.CallbackPath = "/api/auth/signin-oidc";
-            options.SignedOutCallbackPath = "/"; // Redirect to root after logout
+            options.SignedOutCallbackPath = "/api/auth/signout-callback-oidc";
         });
 
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-app.UseForwardedHeaders();
+if (app.Environment.IsDevelopment())
+{
+    app.UseForwardedHeaders();
+}
 
 app.UseFileServer();
 

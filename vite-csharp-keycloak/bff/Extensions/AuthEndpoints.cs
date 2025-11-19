@@ -23,17 +23,19 @@ public static class AuthEndpoints
         });
 
         // Logout endpoint - redirects to perform full logout from Keycloak
-        group.MapGet("/logout", async (HttpContext context) =>
+        group.MapPost("/logout", async (HttpContext context) =>
         {
             // Sign out of both cookie (local) and OIDC (Keycloak)
-            // This will redirect to Keycloak's end_session_endpoint and then back to "/"
-            var properties = new AuthenticationProperties
-            {
-                RedirectUri = "/"
-            };
-            
+            // This will redirect to Keycloak's end_session_endpoint and then back to signout callback
             await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-            await context.SignOutAsync(OpenIdConnectDefaults.AuthenticationScheme, properties);
+            await context.SignOutAsync(OpenIdConnectDefaults.AuthenticationScheme);
+        });
+
+        // Signout callback - handles the return from Keycloak after logout
+        // Redirects to clean root URL without query parameters
+        group.MapGet("/signout-callback-oidc", (HttpContext context) =>
+        {
+            return Results.Redirect("/");
         }).ExcludeFromDescription();
 
         // Get current user info

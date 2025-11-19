@@ -1,5 +1,7 @@
 # Vite + C# BFF with Keycloak Authentication
 
+> **⚠️ DEVELOPMENT ONLY**: This sample demonstrates Keycloak integration for learning purposes. It contains security configurations that are **NOT suitable for production environments**. See [Security Notes](#️-security-notes) for details.
+
 BFF (Backend for Frontend) pattern demonstrating cookie-based authentication with Keycloak as the identity provider. Single C# project serving Vite frontend with protected and public pages.
 
 ## Architecture
@@ -58,11 +60,11 @@ In publish mode, Keycloak is configured with `BFF_URL=https://bff-url` (BFF HTTP
 
 - **PKCE**: Proof Key for Code Exchange enabled for enhanced security
 - **No tokens in frontend**: Tokens never exposed to frontend JavaScript
-- **Cookie-based sessions**: HTTP-only, secure cookies for session management
+- **Cookie-based sessions**: HTTP-only cookies for session management
 - **Authorization code flow**: Standard OIDC flow (not implicit)
-- **Forwarded headers**: Proxy support for X-Forwarded-* headers
+- **POST for logout**: State-changing operations use proper HTTP verbs
 - **Generated secrets**: Client secret auto-generated with 128 bits of entropy
-- Demo credentials: `demo` / `demo`
+- Demo credentials: `demo` / `demo` (for development only)
 
 ## What This Demonstrates
 
@@ -76,6 +78,52 @@ In publish mode, Keycloak is configured with `BFF_URL=https://bff-url` (BFF HTTP
 - **Service Discovery**: Automatic Keycloak URL resolution via Aspire
 - **Dual-Mode URLs**: Different redirect URLs for run mode (Vite) vs publish mode (BFF)
 - **Container Files**: Vite build output embedded in BFF container
+
+## ⚠️ Security Notes
+
+**This sample is for development and learning purposes only. The Keycloak integration is not production-ready.**
+
+### Security Issues for Development Only
+
+**BFF Configuration:**
+- ✅ **PKCE Enabled**: Proof Key for Code Exchange provides protection against authorization code interception
+- ✅ **POST for Logout**: Prevents CSRF attacks on logout endpoint
+- ✅ **Forwarded Headers (Dev Only)**: Only enabled in development mode, not in production
+- ❌ **RequireHttpsMetadata = false**: Disables HTTPS validation for Keycloak metadata endpoints - allows HTTP in development but vulnerable to MITM attacks
+- ❌ **No Cookie Security Settings**: Missing SameSite, Secure flags for production
+- ❌ **Open Redirect**: Login endpoint accepts unvalidated `returnUrl` parameter
+- ❌ **Claims Exposure**: All user claims exposed to frontend via `/api/auth/user` endpoint
+
+**Keycloak Realm Configuration:**
+- ❌ **SSL Not Required**: `sslRequired: "none"` allows unencrypted connections
+- ❌ **Hardcoded Credentials**: Demo user password (`demo`/`demo`) embedded in realm configuration
+- ❌ **No Token Lifetimes**: Default token expiration settings may be too permissive
+- ❌ **No Refresh Token Rotation**: Refresh tokens not configured to rotate on use
+
+**Missing for Production:**
+- ❌ **Rate Limiting**: No protection against brute force attacks on login
+- ❌ **HTTPS Enforcement**: No HSTS or HTTPS redirection
+- ❌ **Content Security Policy**: No CSP headers to prevent XSS
+- ❌ **Session Management**: No session timeout or sliding expiration configured
+- ❌ **Audit Logging**: No authentication event logging
+
+### Making This Production-Ready
+
+To deploy this pattern to production, you would need to:
+
+1. **Enable HTTPS everywhere**: Set `RequireHttpsMetadata = true`, `sslRequired = "external"`, configure HSTS
+2. **Configure cookie security**: Set `SameSite = SameSiteMode.Strict`, `Secure = true`, `HttpOnly = true`
+3. **Validate redirects**: Implement allowlist for `returnUrl` parameter
+4. **Remove hardcoded credentials**: Use proper user provisioning, password policies
+5. **Configure token lifetimes**: Set appropriate access token, refresh token, and session timeouts
+6. **Enable refresh token rotation**: Configure `UseRotationStrategy` in Keycloak
+7. **Add rate limiting**: Implement login attempt throttling and account lockout
+8. **Add audit logging**: Log all authentication events for security monitoring
+9. **Implement CSP**: Add Content-Security-Policy headers to prevent XSS attacks
+10. **Filter claims exposure**: Only return necessary claims to frontend, not all claims
+11. **Configure forwarded headers**: If using a reverse proxy, explicitly configure `KnownProxies` or `KnownNetworks`
+
+**Note**: The Aspire.Hosting.Keycloak integration is currently in preview and not recommended for production environments. For production, deploy Keycloak separately with proper hardening, monitoring, and backup strategies.
 
 ## Running Locally
 
@@ -146,11 +194,14 @@ In publish mode, Vite build output (`npm run build`) is embedded in the BFF cont
 **Login** - `GET /api/auth/login?returnUrl=/protected`
 Initiates OIDC flow, redirects to Keycloak
 
-**Logout** - `GET /api/auth/logout`
+**Logout** - `POST /api/auth/logout`
 Signs out of local cookie session and Keycloak (full logout with redirect to Keycloak's end_session_endpoint)
 
-**Callback** - `GET /api/auth/signin-oidc`
+**Signin Callback** - `GET /api/auth/signin-oidc`
 OAuth callback endpoint where Keycloak redirects after authentication (handled by OIDC middleware)
+
+**Signout Callback** - `GET /api/auth/signout-callback-oidc`
+Handles the return from Keycloak after logout, redirects to clean root URL without query parameters
 
 **User Info** - `GET /api/auth/user`
 Returns current user info with Keycloak standard claims (preferred_username, email, given_name, family_name)
