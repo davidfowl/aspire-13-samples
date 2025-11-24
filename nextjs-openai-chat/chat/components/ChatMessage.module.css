@@ -1,0 +1,33 @@
+.message {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  border-radius: 8px;
+  max-width: 80%;
+}
+
+.message.user {
+  background: rgba(76, 175, 80, 0.2);
+  margin-left: auto;
+  border: 1px solid rgba(76, 175, 80, 0.3);
+}
+
+.message.assistant {
+  background: rgba(33, 150, 243, 0.2);
+  margin-right: auto;
+  border: 1px solid rgba(33, 150, 243, 0.3);
+}
+
+.role {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.5rem;
+  opacity: 0.8;
+}
+
+.content {
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}

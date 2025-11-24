@@ -10,6 +10,9 @@ Small, focused samples demonstrating .NET Aspire 13's polyglot platform support 
 
 ### AI & Machine Learning
 
+**[nextjs-openai-chat](./nextjs-openai-chat)** - Real-time OpenAI chat with SSE streaming
+Chat application with GPT-4 streaming responses using Server-Sent Events. **(OpenAI, Next.js 15, TypeScript, SSE streaming, Edge Runtime, API key management)**
+
 **[rag-document-qa-svelte](./rag-document-qa-svelte)** - RAG document Q&A with Svelte
 Upload documents and ask questions using retrieval augmented generation. Vector search with Qdrant, OpenAI embeddings. **(OpenAI, Qdrant, Svelte, Python, vector database, RAG pattern)**
 
