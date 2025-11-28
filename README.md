@@ -1,6 +1,6 @@
 # Aspire 13 Samples
 
-Small, focused samples demonstrating .NET Aspire 13's polyglot platform support for Python, JavaScript, C#, and Go.
+Small, focused samples demonstrating Aspire 13's polyglot platform support for Python, JavaScript, C#, and Go.
 
 **Quick Start:** `cd <sample> && aspire run`
 
