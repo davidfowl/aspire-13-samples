@@ -1,6 +1,8 @@
-# Aspire 13 Samples
+# Aspire Samples
 
-Small, focused samples demonstrating Aspire 13's polyglot platform support for Python, JavaScript, C#, and Go.
+Polyglot samples for building, running, and wiring real apps across Python, JavaScript, C#, and Go.
+
+Aspire orchestrates your services, manages connection strings, and brings everything up with a single command—regardless of language.
 
 **Quick Start:** `cd <sample> && aspire run`
 
@@ -8,55 +10,53 @@ Small, focused samples demonstrating Aspire 13's polyglot platform support for P
 
 ## Samples
 
-### AI & Machine Learning
+### Fullstack Web Apps
 
-**[rag-document-qa-svelte](./rag-document-qa-svelte)** - RAG document Q&A with Svelte
-Upload documents and ask questions using retrieval augmented generation. Vector search with Qdrant, OpenAI embeddings. **(OpenAI, Qdrant, Svelte, Python, vector database, RAG pattern)**
+**[vite-react-fastapi](./vite-react-fastapi)** - React + FastAPI fullstack *(Python, JavaScript)*
+Todo app with React frontend and FastAPI backend. Shows how Aspire coordinates frontend and backend with YARP routing and handles dev/publish modes seamlessly. **(FastAPI, Vite+React, YARP path transforms, dual-mode dev/publish)**
 
-### Python
+**[vite-csharp-postgres](./vite-csharp-postgres)** - Minimal API + PostgreSQL + Vite *(C#, JavaScript)*
+Todo app with React frontend and C# backend. Shows how Aspire wires the API to PostgreSQL, injects connection strings, and serves the frontend through YARP. **(EF Core 10, PostgreSQL, pgAdmin, Scalar API docs, Vite+React, OpenTelemetry, container file publishing)**
 
-**[python-fastapi-postgres](./python-fastapi-postgres)** - FastAPI + PostgreSQL + pgAdmin
-CRUD API with async operations and database migrations. **(FastAPI, PostgreSQL, pgAdmin, async/await, `.WaitFor()` dependencies, requirements.txt)**
+**[node-express-redis](./node-express-redis)** - Express + Redis + Vite frontend *(JavaScript)*
+Visit counter with real-time updates. Shows how Aspire connects Express to Redis and routes traffic through YARP with WebSocket support. **(Express, Redis, Vite+React, YARP routing, WebSockets, instant state updates)**
 
-**[python-openai-agent](./python-openai-agent)** - OpenAI chat agent with web UI
-AI-powered chat agent with streaming responses. **(OpenAI integration, uv package manager, pyproject.toml, API key management)**
+### APIs & Services
 
-**[python-script](./python-script)** - Pure Python script
-Minimal Python script with zero dependencies. **(Virtual environment auto-creation, simplest possible Aspire app)**
+**[golang-api](./golang-api)** - Go API with in-memory storage *(Go)*
+REST API with chi router. Shows how Aspire runs Go apps, downloads modules, and builds containers—all with a custom Go integration. **(Go, chi router, CRUD operations, sync.RWMutex, AddGoApp integration)**
 
-### JavaScript
+**[python-fastapi-postgres](./python-fastapi-postgres)** - FastAPI + PostgreSQL + pgAdmin *(Python)*
+CRUD API with async operations. Shows how Aspire wires FastAPI to PostgreSQL and pgAdmin, manages connection strings, and brings everything up with `aspire run`. **(FastAPI, PostgreSQL, pgAdmin, async/await, `.WaitFor()` dependencies, requirements.txt)**
 
-**[node-express-redis](./node-express-redis)** - Express + Redis + Vite frontend
-Visit counter with real-time updates and clickable page cards. **(Express, Redis, Vite+React, YARP routing, WebSockets, instant state updates)**
+### AI & Agents
 
-**[vite-yarp-static](./vite-yarp-static)** - YARP serving static files
-Single-file AppHost demonstrating static file serving. **(YARP reverse proxy, Vite HMR in dev, static file publishing, container files)**
+**[python-openai-agent](./python-openai-agent)** - OpenAI chat agent with web UI *(Python)*
+AI-powered chat agent with streaming responses. Shows how Aspire manages API keys as parameters and coordinates the Python environment with uv. **(OpenAI integration, uv package manager, pyproject.toml, API key management)**
 
-### C#
+**[rag-document-qa-svelte](./rag-document-qa-svelte)** - RAG document Q&A with Svelte *(Python, JavaScript)*
+Upload documents and ask questions using retrieval augmented generation. Shows how Aspire orchestrates Qdrant vector database, OpenAI embeddings, and a Svelte frontend together. **(OpenAI, Qdrant, Svelte, Python, vector database, RAG pattern)**
 
-**[vite-csharp-postgres](./vite-csharp-postgres)** - ASP.NET Core Minimal API + PostgreSQL + Vite
-Todo app demonstrating modern .NET patterns. **(EF Core 10, PostgreSQL, pgAdmin, Scalar API docs, Vite+React, OpenTelemetry, container file publishing)**
+### Polyglot Systems
 
-### Go
+**[polyglot-task-queue](./polyglot-task-queue)** - Multi-language task queue with RabbitMQ *(Python, C#, JavaScript)*
+Distributed task processing with Python, C#, and Node.js workers. Shows how Aspire runs workers in multiple languages against the same RabbitMQ broker and correlates traces across all of them with OpenTelemetry. **(RabbitMQ, distributed tracing, OpenTelemetry, messaging semantic conventions, polyglot services, Vite+React)**
 
-**[golang-api](./golang-api)** - Go API with in-memory storage
-REST API with chi router and thread-safe in-memory data store. Custom Go integration that downloads modules, runs apps, and builds containers. **(Go, chi router, CRUD operations, sync.RWMutex, AddGoApp integration)**
+### Cloud & Azure
 
-### Polyglot
+**[image-gallery](./azure/image-gallery)** - Image gallery with event-triggered Container Apps Jobs *(C#, JavaScript)*
+Upload images with queue-triggered thumbnail generation. Shows how Aspire provisions Azure resources and runs locally with Azurite—no Azure subscription required for development. **(Azure Blob Storage, Azure Storage Queues, Container Apps Jobs, Vite+React, Azure.Provisioning)**
 
-**[polyglot-task-queue](./polyglot-task-queue)** - Multi-language task queue with RabbitMQ + OpenTelemetry
-Distributed task processing with Python, C#, and Node.js workers. **(RabbitMQ, distributed tracing, OpenTelemetry, messaging semantic conventions, polyglot services, Vite+React, language-specific strengths: pandas/numpy, strong typing, async I/O)**
+### Foundations
 
-**[vite-react-fastapi](./vite-react-fastapi)** - React + FastAPI fullstack
-Todo app with YARP routing between Python backend and JavaScript frontend. **(FastAPI, Vite+React, YARP path transforms, dual-mode dev/publish)**
+**[python-script](./python-script)** - Pure Python script *(Python)*
+Minimal Python script with zero dependencies. Shows the simplest possible Aspire app—auto-created virtual environment, single script, one command to run. **(Virtual environment auto-creation, simplest possible Aspire app)**
 
-### Azure
-
-**[image-gallery](./azure/image-gallery)** - Image gallery with event-triggered Container Apps Jobs
-Upload images with queue-triggered thumbnail generation. Event-driven Container Apps Jobs with queue-based autoscaling, managed identity authentication, and Azure SQL free tier. Demonstrates Azure.Provisioning APIs for fine-grained infrastructure control. Runs locally with Azurite emulator - **no Azure subscription required for local development**. Can deploy entirely within Azure free tier limits. **(Azure Blob Storage, Azure SQL free tier, Azure Storage Queues, Container Apps Jobs, Vite+React, ImageSharp, Azure.Provisioning, managed identity)**
+**[vite-yarp-static](./vite-yarp-static)** - YARP serving static files *(JavaScript)*
+Single-file AppHost demonstrating static file serving. Shows how Aspire handles Vite HMR in dev and publishes static files for production. **(YARP reverse proxy, Vite HMR in dev, static file publishing, container files)**
 
 ## Learn More
 
-- [Aspire 13 Documentation](https://aspire.dev/whats-new/aspire-13/)
+- [Aspire Documentation](https://aspire.dev/docs/)
 - [Aspire VS Code Extension](https://marketplace.visualstudio.com/items?itemName=microsoft-aspire.aspire-vscode)
 - [Aspire GitHub](https://github.com/dotnet/aspire)
